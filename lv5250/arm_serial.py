@@ -9,11 +9,13 @@ import time
 # python -m serial.tools.list_ports
 
 #Robot Arm Serial Port Interface Class
+
+
 class ArmSerial:
 
     # Serial Port Defintion
     # Use python -m serial.tools.list_ports to get a list of available ports
-    ARM_PORT = "/dev/ttyUSB0"
+    ARM_PORT = "/dev/cu.usbserial-FT5ZVFRV"
 
     def __init__(self):
         self.serial = serial.Serial()
