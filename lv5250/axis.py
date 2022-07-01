@@ -2,10 +2,21 @@ import encoder
 from encoder import *
 from enum import Enum, auto
 
+# Enumeration for each Axis's Type
+
+
+class AxisType(Enum):
+    GRIPPER = 0
+    WRIST_ROLL = 1
+    WRIST_PITCH = 2
+    ELBOW = 3
+    SHOULDER = 4
+    BASE = 5
+
 # Enumeration Representing the Axis's current staticmethod(
 
 
-class AxisState(enum):
+class AxisState(Enum):
     UNKNOWN = auto()
     STOPPED = auto()
     MOVING = auto()
