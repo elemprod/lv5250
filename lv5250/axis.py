@@ -1,3 +1,4 @@
+import enum
 import encoder
 from encoder import *
 from enum import Enum, auto
