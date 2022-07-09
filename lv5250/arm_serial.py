@@ -4,8 +4,6 @@
 import serial
 import time
 
-import arm_cmd
-from arm_cmd import *
 
 # List Serial Ports
 # python -m serial.tools.list_ports
@@ -28,8 +26,8 @@ class ArmSerial:
         self.serial.parity = serial.PARITY_NONE
         self.serial.stopbits = serial.STOPBITS_ONE
         self.serial.xonxoff = False
-        self.serial.rtscts = False
-        self.serial.dsrdtr = False
+        self.serial.rtscts = True
+        self.serial.dsrdtr = True
         self.serial.exclusive = False
         self.serial.timeout = 1.0
         self.serial.write_timeout = 5.0
@@ -47,12 +45,8 @@ class ArmSerial:
             print("Serial Port Error: " + str(e))
         else:
             print("Serial Port Opened: " + self.serial.name)
-            self.serial.write(b'REMOTE\r')
 
     # Close the Robot Arm's Serial Port
     def close(self):
         if self.serial.isOpen:
             self.serial.close()
-
-    def send(self, msg):
-        print('Sent ' + str(self.serial.write(msg)) + " Bytes")
