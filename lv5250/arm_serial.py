@@ -50,3 +50,10 @@ class ArmSerial:
     def close(self):
         if self.serial.isOpen:
             self.serial.close()
+
+    def send(self, cmd):
+        print('Tx: ', cmd, ' Bytes: ', self.serial.write(cmd))
+
+    def read(self):
+
+        return self.serial.readline()

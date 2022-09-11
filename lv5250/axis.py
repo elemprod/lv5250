@@ -25,9 +25,14 @@ class AxisState(Enum):
 # Data Class representing a single robot arm axis.
 
 
-class Axis(object):
-    def __init__(self, state):
-        self.state = state
+class Axis:
+    def __init__(self, scale, min_cnt, max_cnt, state):
+        self._state = state
+        # Set the hardware and software limits to the min / max count.
+        self._hw_limit_max = int(max_cnt)
+        self._sw_limit_max = int(max_cnt)
+        self._hw_limit_min = int(min_cnt)
+        self._sw_limit_min = int(min_cnt)
 
     # The Current State of the Axis
     @property
@@ -38,93 +43,90 @@ class Axis(object):
     def state(self, state):
         self._state = AxisState(state)
 
+    # Encoder position at the axis hardware maximuim limit .  Movement past
+    # this position would trip the maximuim limit switch.
+    @property
+    def hw_limit_max(self):
+        return self._hw_limit_max
+
+    @hw_limit_max.setter
+    def hw_limit_max(self, limit):
+        self._hw_limit_max = int(limit)
+
+    # Encoder position at it's software maximuim limit .
+    # Can be programmed to less than the hardware limit to constrain axis positions.
+    @property
+    def sw_limit_max(self):
+        return self._sw_limit_max
+
+    @sw_limit_max.setter
+    def sw_limit_max(self, limit):
+        self._sw_limit_max = int(limit)
+
+    # Encoder position at it's maximuim limit constrained by the
+    # lesser of the hardware and software limit maximuim positions.
+    @property
+    def limit_max(self):
+        if(self._sw_limit_max <= self._hw_limit_max):
+            return self._sw_limit_max
+        else:
+            return self._hw_limit_max
+
+    # Encoder position at the axis hardware minimuim limit .  Movement past
+    # this position would trip the minimuim limit switch.
+    @property
+    def hw_limit_min(self):
+        return self._hw_limit_min
+
+    @hw_limit_min.setter
+    def hw_limit_min(self, limit):
+        self._hw_limit_min = int(limit)
+
+    # Encoder position at the axis software minimuim limit.
+    # Can be programmed to greater than the hardware limit to constrain axis positions.
+    @property
+    def sw_limit_min(self):
+        return self._sw_limit_min
+
+    @sw_limit_min.setter
+    def sw_limit_min(self, limit):
+        self._sw_limit_min = int(limit)
+
+    # Encoder position at it's minimuim limit constrained by the
+    # greater of the hardware and software limit minimuim positions.
+    @property
+    def limit_min(self):
+        if(self._sw_limit_min <= self._hw_limit_min):
+            return self._sw_limit_min
+        else:
+            return self._hw_limit_min
+
 # Data Class representing a single rotary axis.
+# Contains a collection of encoder objects representing the current position,
+# the commanded position, the hardware min and max limit positions annd the
+# software min and max limit positions.
 
 
 class RotaryAxis(Axis):
 
     def __init__(self, scale, min_cnt, max_cnt, state=AxisState.STOPPED):
-        self.state = state
-        self._current = encoder.RotaryEncoder(scale)
-        self._command = encoder.RotaryEncoder(scale)
+        super().__init__(scale, min_cnt, max_cnt, state)
 
-        # Set the hardware and software limits to the max count.
-        self._hw_limit_max = encoder.RotaryEncoder(scale, int(max_cnt))
-        self._sw_limit_max = encoder.RotaryEncoder(scale, int(max_cnt))
-
-        # Set the hardware and software limits to the min count.
-        self._hw_limit_min = encoder.RotaryEncoder(scale, int(min_cnt))
-        self._sw_limit_min = encoder.RotaryEncoder(scale, int(min_cnt))
-
-        # Current Axis Position
-        @property
-        def current(self):
-            return self._current
-
-        # Commanded Axis Position (Target or Goal Position)
-        @property
-        def command(self):
-            return self._command
-
-        # Encoder position at the axis hardware maximuim limit .  Movement past
-        # this position would trip the maximuim limit switch.
-        @property
-        def hw_limit_max(self):
-            return self._hw_limit_max
-
-        # Encoder position at it's software maximuim limit .
-        # Can be programmed to less than the hardware limit to constrain axis positions.
-        @property
-        def sw_limit_max(self):
-            return self._sw_limit_max
-
-        # Encoder position at it's maximuim limit constrained by the
-        # lesser of the hardware and software limit maximuim positions.
-        @property
-        def limit_max(self):
-            if(self._sw_limit_max <= self._hw_limit_max):
-                return self._sw_limit_max
-            else:
-                return self._hw_limit_max
-
-        # Encoder position at the axis hardware minimuim limit .  Movement past
-        # this position would trip the minimuim limit switch.
-        @property
-        def hw_limit_min(self):
-            return self._hw_limit_min
-
-        # Encoder position at the axis software minimuim limit.
-        # Can be programmed to greater than the hardware limit to constrain axis positions.
-        @property
-        def sw_limit_min(self):
-            return self._sw_limit_min
-
-        # Encoder position at it's minimuim limit constrained by the
-        # greater of the hardware and software limit minimuim positions.
-        @property
-        def limit_min(self):
-            if(self._sw_limit_min <= self._hw_limit_min):
-                return self._sw_limit_min
-            else:
-                return self._hw_limit_min
+        # The Axis last read encoder postion.
+        self.current = encoder.RotaryEncoder(scale, 0)
+        # The Axis commanded (target) encoder costion
+        self.command = encoder.RotaryEncoder(scale, 0)
 
 # Data Class representing a single linear axis.
 
 
 class LinearAxis(Axis):
 
-    # encoder_scale scaling factor for converting encoder counts to degrees
-    def __init__(self, scale, state=AxisState.STOPPED):
-        self.state = state
-        self._current = encoder.LinearEncoder(scale)
-        self._command = encoder.LinearEncoder(scale)
+    # encoder_scale scaling factor for converting encoder counts to mm of travel
+    def __init__(self, scale, min_cnt, max_cnt, state=AxisState.STOPPED):
+        super().__init__(scale, min_cnt, max_cnt, state)
 
-        # Current Axis Postion
-        @ property
-        def current(self):
-            return self._current
-
-        # Commanded Axis Position
-        @ property
-        def command(self):
-            return self._command
+        # The Axis last read encoder postion.
+        self.current = encoder.LinearEncoder(scale, 0)
+        # The Axis commanded (target) encoder costion
+        self.command = encoder.LinearEncoder(scale, 0)

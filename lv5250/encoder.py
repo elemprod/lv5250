@@ -1,10 +1,10 @@
 
 
 # Data Class representing a single Optical Encoder's state.
-class Encoder(object):
+class Encoder:
 
-    def __init__(self, count=0):
-        self.count = count
+    def __init__(self, cnt=0):
+        self._count = cnt
 
     # Current Encoder's Absolute Position in Counts
     @property
@@ -17,22 +17,22 @@ class Encoder(object):
 
     # Comparison Overloaded Operators
     def __lt__(self, other):
-        return self.count < other.count
+        return self._count < other.count
 
     def __le__(self, other):
-        return self.count <= other.count
+        return self._count <= other.count
 
     def __eq__(self, other):
-        return self.count == other.count
+        return self._count == other.count
 
     def __ne__(self, other):
-        return self.count != other.count
+        return self._count != other.count
 
     def __gt__(self, other):
-        return self.count > other.count
+        return self._count > other.count
 
     def __ge__(self, other):
-        return self.count >= other.count
+        return self._count >= other.count
 
 # Data Class representing a single Rotary Encoder's Postiion.
 # A Rotary Ecoders positions can be accessed in units of both degrees
@@ -42,8 +42,8 @@ class Encoder(object):
 class RotaryEncoder(Encoder):
 
     def __init__(self, scale, count=0):
-        super().__init__(int(count))
-        self.scale = scale
+        super().__init__(count)
+        self._scale = float(scale)
 
     # Scaling Factor used to convert an absolute position in units of encoder
     # counts to an aboslute position in units of degrees.
@@ -59,11 +59,11 @@ class RotaryEncoder(Encoder):
     # The encoder's current absolute position in units of degrees.
     @property
     def position(self):
-        return self.count * self.scale
+        return self.count * self._scale
 
     @position.setter
     def position(self, degrees):
-        self.count = round(degrees / self.scale)
+        self.count = round(degrees / self._scale)
 
 # Data Class representing a single Linear Encoder's Postiion.
 # A Linear Ecoder's positions can be accessed in units of both mm
@@ -74,7 +74,7 @@ class LinearEncoder(Encoder):
 
     def __init__(self, scale, count=0):
         super().__init__(int(count))
-        self.scale = scale
+        self._scale = float(scale)
 
     # Scaling Factor used to convert an absolute position in units of encoder
     # counts to an aboslute position in units of milimeters.
@@ -90,8 +90,8 @@ class LinearEncoder(Encoder):
     # The encoder's current absolute position in units of mm.
     @property
     def position(self):
-        return self.count * self.scale
+        return self.count * self._scale
 
     @position.setter
-    def position(self, degrees):
-        self.count = round(degrees / self.scale)
+    def position(self, mm):
+        self.count = round(mm / self._scale)
