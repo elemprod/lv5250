@@ -1,6 +1,7 @@
-import enum
+
 import encoder
 from encoder import *
+import enum
 from enum import Enum, auto
 
 # Enumeration for each Axis's Type
