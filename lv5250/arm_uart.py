@@ -11,40 +11,55 @@ except ImportError:
 
 from arm import Arm, ArmConnectionState
 
-# Arm Message Definition - Defines an Arm Command & Response
+# Arm Message Definition - Defines an Serial Arm Command & Response
 
 
 class ArmMessage():
-    def __init__(self, command, response=None, timeout=5, callback=None):
-        # The command to send
-        self.command = bytes(command)
-        # If None, the callback will be made following any response else the
-        # the callback will made after the response as received.
-        if response is None:
-            self.response = None
-        else:
-            self.response = bytes(response)
-        # The maximuim time to wait in seconds
+    def __init__(self, command: str, timeout=5, response: str = None, cb_done=None, cb_other=None):
+        # The command to send to send.
+        # Line endings are automatically added .
+        self.command = '{}\r\n'.format(command)
+        #print(self.command)
+
+        # The maximuim time to wait in seconds for a matching response
         self.timeout = float(timeout)
-        # Function to call once a response has been received.
-        self.callback = callback
-        # The response received.
-        # None if no response is received before the time out expires.
-        self.received = None
+
+        # The response string which is anticipated to be sent by the arm to indicate
+        # that the command has completed.
+        # This string can be specified as the full response string or just the starting
+        # part of the response.   The done callback will be made once a matching
+        # respone is received is received.
+        self.response = response
+
+        # Function to call once a matching response has been received or a timeout happens.
+        self.cb_done = cb_done
+
+        # Function to call when a respones other than the done responnse are received.
+        # Other responses will be ignored if set to None
+        self.cb_other = cb_other
+
+        # Callbacks have the form of callback(message : ArmMessage, response : str)
 
 
 class ArmUART:
 
     def __init__(self, port):
 
-        # Que of responses received from the Arm via the serial link
+        # Que of responses received over the the serial link
         self.responses = queue.Queue()
 
-        # Que of unhandled responses
-        self.events = queue.Queue()
-
-        # Lock for ensuring exclusive serial port command transmissions
+        # Lock for ensuring exclusive Serial transmission accesss
         self.tx_lock = threading.Lock()
+
+        # Que of messages to be sent.
+        self.messages = queue.Queue()
+
+        # Thread for reading responses over the serial port
+        self.rx_thread = threading.Thread(
+                target=self._rx_loop, daemon=True)
+
+        # Thread for Writing messages to the serial port
+        self.tx_thread = threading.Thread(target=self._tx_loop, daemon=True)
 
         self.serial = serial.Serial(port=port, baudrate=9600)
         self.serial.bytesize = serial.EIGHTBITS
@@ -62,78 +77,138 @@ class ArmUART:
         # close the port if already open
         if self.serial.isOpen:
             self.serial.close()
-
         try:
             self.serial.open()
         except serial.SerialException as e:
             print("Error Openning Port: " + str(e))
         else:
             print("Port Open")
-            self.reader_thread = threading.Thread(
-                target=self.read_loop, daemon=True)
-            self.reader_thread.start()
+            self.rx_thread.start()
+            self.tx_thread.start()
+
+    # Function for adding a message to the message que
+    def message_enque(self, message: ArmMessage):
+        self.messages.put(message)
 
     # loop for adding serial messages to the responses que
-    def read_loop(self):
+    def _rx_loop(self):
         while self.serial.isOpen:
             line = self.serial.readline()
+            # Remove the line endings and leading / trailing spaces
+            line = line.replace(b'\n', b'')
+            line = line.replace(b'\r', b'')
+            line = line.strip()
+            # convert the bytes to a string
+            line_str = line.decode('ascii')
             #print(line)
-            if len(line) > 0:
-                self.responses.put(line)
+            if len(line_str) > 0:
+                self.responses.put(line_str)
             time.sleep(0.1)
 
-    # def read_line(self):
-    #     print(arm_serial.serial.readline())
-    #
-    # def get_pos(self):
-    #     self.serial.write(bytes('GET POS\r\n', 'utf-8'))
-    #
-    # def hard_home(self):
-    #     self.serial.write(bytes('HARDHOME\r\n', 'utf-8'))
+    # loop for transmitting messages from the messages que
+    def _tx_loop(self):
+        while self.serial.isOpen:
+            try:
+                message = self.messages.get(block=True, timeout=0.5)
+                self.tx_message(message)
+            except queue.Empty:
+                time.sleep(0.1)
 
-    def send(self, message: ArmMessage):
+    # Function for sending a single message over the serial port.
+    def tx_message(self, message: ArmMessage):
         with self.tx_lock:
-            # Send the command
-            self.serial.write(message.command)
+            # Convert the command string to bytes and send
+            self.serial.write(bytes(message.command, 'ascii'))
             while True:
                 try:
                     line = self.responses.get(timeout=message.timeout)
                     if message.response:
-                        if line == message.response:
+                        if line.startswith(message.response):
                             # the correct response was received
-                            message.received = line
-                            if message.callback:
-                                message.callback(message)
+                            print('Response Received')
+                            if message.cb_done:
+                                message.cb_done(message, line)
                             return
                         else:
-                            # the received response didn't match.
-                            # Save the response to the unhandled que
-                            self.events.put(line)
-                            # No return here, get the next line.
-                            print("Unhandled" + str(line))
+                            # The response didn't match the specified response.
+                            if message.cb_other:
+                                message.cb_other(message, line)
+                            # Don't return here, get the next line.
                     else:
                         # no response was set so return after the first response
-                        message.received = line
-                        if message.callback:
-                            message.callback(message)
+                        if message.cb_done:
+                            message.cb_done(message, line)
                         return
                 except queue.Empty:
                     # no response was received before the timeout expired
-                    if message.callback:
-                        message.callback(message)
+                    if message.cb_done:
+                        message.cb_done(message, None)
                     return
 
 
 if __name__ == "__main__":
 
-    def response_print(message: ArmMessage):
-        print("Callback")
-        print(message.received)
+    def other_print(message: ArmMessage, response: str):
+        print('Other Response : {}'.format(response))
+
+    def get_pos_print(message: ArmMessage, response: str):
+        #print('Position : {}'.format(response))
+        str_arr = response.split()
+        if len(str_arr) == 9:
+            print('Gripper : {}'.format(str_arr[1]))
+            print('Wrist Roll : {}'.format(str_arr[2]))
+            print('Wrist Pitch : {}'.format(str_arr[3]))
+            print('Elbow : {}'.format(str_arr[4]))
+            print('Shoulder : {}'.format(str_arr[5]))
+            print('Base : {}'.format(str_arr[6]))
+
+    def hard_home_print(message: ArmMessage, response: str):
+        print("Hard Home Done")
+
+    def remote_print(message: ArmMessage, response: str):
+        print('Remote : {}'.format(response))
+
+    def run_done_print(message: ArmMessage, response: str):
+        print('Run Done : {}'.format(response))
 
     arm_serial = ArmUART("/dev/cu.usbserial-FT5ZVFRV")
 
-    cmd_test = ArmMessage(command=bytes('GET POS\r\n', 'utf-8'),
-                          response=None, timeout=2, callback=response_print)
+    msg_hard_home = ArmMessage(command='HARDHOME',
+                               response='>END',
+                               timeout=30,
+                               cb_done=hard_home_print,
+                               cb_other=other_print)
+
+    msg_get_pos = ArmMessage(command='GET POS',
+                             response='P',
+                             timeout=2,
+                             cb_done=get_pos_print,
+                             cb_other=other_print)
+
+    msg_remote = ArmMessage(command='REMOTE',
+                            response=None,
+                            timeout=1,
+                            cb_done=remote_print,
+                            cb_other=None)
+
+    msg_remote = ArmMessage(command='REMOTE',
+                            response=None,
+                            timeout=1,
+                            cb_done=remote_print,
+                            cb_other=None)
+
+    msg_run = ArmMessage(command='RUN 50 0 0 0 0 0 0 100 0 1',
+                         response='>END',
+                         timeout=1,
+                         cb_done=run_done_print,
+                         cb_other=other_print)
+
+    for _ in range(1):
+        #arm_serial.message_enque(msg_hard_home)
+        arm_serial.message_enque(msg_get_pos)
+        arm_serial.message_enque(msg_run)
+        arm_serial.message_enque(msg_get_pos)
+        #arm_serial.message_enque(msg_remote)
+
     while True:
-        arm_serial.send(cmd_test)
-        time.sleep(10)
+        time.sleep(5)
