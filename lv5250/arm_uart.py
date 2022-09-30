@@ -11,11 +11,12 @@ except ImportError:
 
 from arm import Arm, ArmConnectionState
 
-# Arm Message Definition - Defines an Serial Arm Command & Response
+# Arm Message Definition
+# Defines a  Arm Command & Response for sending over the serial connection.
 
 
-class ArmMessage():
-    def __init__(self, command: str, timeout=5, response: str = None, cb_done=None, cb_other=None):
+class ArmMessage:
+    def __init__(self, command: str, timeout=5, response: str = None, cb_start=None, cb_done=None, cb_other=None):
         # The command to send to send.
         # Line endings are automatically added .
         self.command = '{}\r\n'.format(command)
@@ -31,14 +32,19 @@ class ArmMessage():
         # respone is received is received.
         self.response = response
 
-        # Function to call once a matching response has been received or a timeout happens.
+        # Function to call immediately before the command is sent.
+        # Has the form of callback(message : ArmMessage)
+        self.cb_start = cb_start
+
+        # Function to call once a matching doen response has been received or
+        # a timeout happens.
+        # Has the form of callback(message : ArmMessage, response : str)
         self.cb_done = cb_done
 
-        # Function to call when a respones other than the done responnse are received.
+        # Function to call when a respones other than the done responnse is received.
         # Other responses will be ignored if set to None
+        # Has the form of callback(message : ArmMessage, response : str)
         self.cb_other = cb_other
-
-        # Callbacks have the form of callback(message : ArmMessage, response : str)
 
 
 class ArmUART:
@@ -66,8 +72,6 @@ class ArmUART:
         self.serial.parity = serial.PARITY_NONE
         self.serial.stopbits = serial.STOPBITS_ONE
         self.serial.xonxoff = False
-        #self.serial.rtscts = True
-        #self.serial.dsrdtr = True
         self.serial.rtscts = False
         self.serial.dsrdtr = False
         self.serial.exclusive = False
@@ -83,11 +87,13 @@ class ArmUART:
             print("Error Openning Port: " + str(e))
         else:
             print("Port Open")
+            self.responses.queue.clear()
+            self.messages.queue.clear()
             self.rx_thread.start()
             self.tx_thread.start()
 
     # Function for adding a message to the message que
-    def message_enque(self, message: ArmMessage):
+    def tx_msg_enque(self, message: ArmMessage):
         self.messages.put(message)
 
     # loop for adding serial messages to the responses que
@@ -110,13 +116,19 @@ class ArmUART:
         while self.serial.isOpen:
             try:
                 message = self.messages.get(block=True, timeout=0.5)
-                self.tx_message(message)
+                self.tx_msg(message)
             except queue.Empty:
                 time.sleep(0.1)
+        # Empty the Messages Queue on Disconnect.
+        self.messages.queue.clear()
 
     # Function for sending a single message over the serial port.
-    def tx_message(self, message: ArmMessage):
+    # Note that the function blocks.
+    def tx_msg(self, message: ArmMessage):
         with self.tx_lock:
+            # Make the start callback
+            if message.cb_start:
+                message.cb_start(message)
             # Convert the command string to bytes and send
             self.serial.write(bytes(message.command, 'ascii'))
             while True:
@@ -153,14 +165,15 @@ if __name__ == "__main__":
 
     def get_pos_print(message: ArmMessage, response: str):
         #print('Position : {}'.format(response))
-        str_arr = response.split()
-        if len(str_arr) == 9:
-            print('Gripper : {}'.format(str_arr[1]))
-            print('Wrist Roll : {}'.format(str_arr[2]))
-            print('Wrist Pitch : {}'.format(str_arr[3]))
-            print('Elbow : {}'.format(str_arr[4]))
-            print('Shoulder : {}'.format(str_arr[5]))
-            print('Base : {}'.format(str_arr[6]))
+        if response:
+            str_arr = response.split()
+            if len(str_arr) == 9:
+                print('Gripper : {}'.format(str_arr[1]))
+                print('Wrist Roll : {}'.format(str_arr[2]))
+                print('Wrist Pitch : {}'.format(str_arr[3]))
+                print('Elbow : {}'.format(str_arr[4]))
+                print('Shoulder : {}'.format(str_arr[5]))
+                print('Base : {}'.format(str_arr[6]))
 
     def hard_home_print(message: ArmMessage, response: str):
         print("Hard Home Done")
@@ -197,18 +210,18 @@ if __name__ == "__main__":
                             cb_done=remote_print,
                             cb_other=None)
 
-    msg_run = ArmMessage(command='RUN 50 0 0 0 0 0 0 100 0 1',
+    msg_run = ArmMessage(command='RUN 50 0 0 0 0 2500 0 -1000 0 1',
                          response='>END',
                          timeout=1,
                          cb_done=run_done_print,
                          cb_other=other_print)
 
     for _ in range(1):
-        #arm_serial.message_enque(msg_hard_home)
-        arm_serial.message_enque(msg_get_pos)
-        arm_serial.message_enque(msg_run)
-        arm_serial.message_enque(msg_get_pos)
-        #arm_serial.message_enque(msg_remote)
+        #arm_serial.tx_msg_enque(msg_hard_home)
+        #arm_serial.tx_msg_enque(msg_get_pos)
+        arm_serial.tx_msg_enque(msg_run)
+        #arm_serial.tx_msg_enque(msg_get_pos)
+        #arm_serial.tx_msg_enque(msg_remote)
 
     while True:
         time.sleep(5)
