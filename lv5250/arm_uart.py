@@ -95,6 +95,7 @@ class ArmUART:
     # Function for adding a message to the message que
     def tx_msg_enque(self, message: ArmMessage):
         self.messages.put(message)
+        #print(self.messages.count)
 
     # loop for adding serial messages to the responses que
     def _rx_loop(self):
@@ -119,6 +120,8 @@ class ArmUART:
                 self.tx_msg(message)
             except queue.Empty:
                 time.sleep(0.1)
+            except all as e:
+                print(e)
         # Empty the Messages Queue on Disconnect.
         self.messages.queue.clear()
 
@@ -217,11 +220,13 @@ if __name__ == "__main__":
                          cb_other=other_print)
 
     for _ in range(1):
-        #arm_serial.tx_msg_enque(msg_hard_home)
         #arm_serial.tx_msg_enque(msg_get_pos)
+        #arm_serial.tx_msg_enque(msg_run)
+        #arm_serial.tx_msg_enque(msg_get_pos)
+        arm_serial.tx_msg_enque(msg_remote)
+        arm_serial.tx_msg_enque(msg_hard_home)
+        arm_serial.tx_msg_enque(msg_get_pos)
         arm_serial.tx_msg_enque(msg_run)
-        #arm_serial.tx_msg_enque(msg_get_pos)
-        #arm_serial.tx_msg_enque(msg_remote)
 
     while True:
         time.sleep(5)

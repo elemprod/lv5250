@@ -20,6 +20,7 @@ class Arm:
 
         self.state = ArmConnectionState.UNKNOWN
 
+        # Initialize each Arm Axis with the constants from the ArmConfig
         # Gripper Axis
         self.gripper = LinearAxis(
             ArmConfig.GRIPPER_SCALE, ArmConfig.GRIPPER_MIN, ArmConfig.GRIPPER_MAX)
