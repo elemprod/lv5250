@@ -12,10 +12,10 @@ class ArmManager:
 
     def __init__(self, port):
         self._arm_uart = arm_uart.ArmUART(port)
-        # internal Arm Data Object
+        # Internal Arm Data Object
         self._arm = arm.Arm()
-        # external Arm Data Object
-        #self._shared_arm = queue.Queue()
+        # Externally Shared Arm Data Object
+        self._shared_arm = queue.Queue()
 
     # Function for adding a Get Position Command to the Que
 
@@ -24,28 +24,9 @@ class ArmManager:
                              response='P',
                              timeout=2,
                              cb_start=None,
-                             cb_done=self.get_pos_cmd_end_cb,
-                             cb_other=None)
+                             cb_done=self._get_pos_cmd_end_cb,
+                             cb_other=self._other_response_cb)
         self._arm_uart.tx_msg_enque(message)
-
-    # Function for handling a Get Position End response
-    def get_pos_cmd_end_cb(self, message: ArmMessage, response: str):
-        print('Position : {}'.format(response))
-        if response:
-            str_arr = response.split()
-            if len(str_arr) == 9 and str_arr[0] == 'P':
-                self._arm.gripper.current.count = int(str_arr[1])
-                self._arm.wrist_roll.current.count = int(str_arr[2])
-                self._arm.wrist_pitch.current.count = int(str_arr[3])
-                self._arm.elbow.current.count = int(str_arr[4])
-                self._arm.shoulder.current.count = int(str_arr[5])
-                self._arm.base.current.count = int(str_arr[6])
-                # print('Gripper : {}'.format(str_arr[1]))
-                # print('Wrist Roll : {}'.format(str_arr[2]))
-                # print('Wrist Pitch : {}'.format(str_arr[3]))
-                # print('Elbow : {}'.format(str_arr[4]))
-                # print('Shoulder : {}'.format(str_arr[5]))
-                # print('Base : {}'.format(str_arr[6]))
 
     # Function for adding a Move to Position Command to the Que
     def run_cmd(self, speed, gripper, wrist_roll, wrist_pitch, elbow, shoulder, base):
@@ -54,15 +35,81 @@ class ArmManager:
 
         message = ArmMessage(command=cmd_str,
                              response='>END',
-                             timeout=2,
-                             cb_start=self.run_cmd_start_cb,
-                             cb_done=None,
-                             cb_other=self.run_cmd_other_cb)
+                             timeout=5,
+                             cb_start=self._run_cmd_start_cb,
+                             cb_done=self._run_cmd_end_cb,
+                             cb_other=self._other_response_cb)
         self._arm_uart.tx_msg_enque(message)
 
+    # Function for sending the Remote Command.
+    # Enables serial control of the Arm.
+    def remote_cmd(self):
+        print("Remote Cmd")
+        message = ArmMessage(command='REMOTE',
+                             response='>OK',
+                             timeout=1,
+                             cb_start=self._remote_cmd_start_cb,
+                             cb_done=self._remote_cmd_done_cb,
+                             cb_other=self._other_response_cb)
+        self._arm_uart.tx_msg_enque(message)
+
+    # Function for sending the Hard Home Command
+    # Commands to the robot to find the hardware limit switch positions.
+    def hard_home_cmd(self):
+        print("Hard Home Cmd")
+        message = ArmMessage(command='HARDHOME',
+                             response='>END',
+                             timeout=30,
+                             cb_start=self._hard_home_cmd_start_cb,
+                             cb_done=self._hard_home_cmd_done_cb,
+                             cb_other=self._other_response_cb)
+        self._arm_uart.tx_msg_enque(message)
+
+    # Function for sending the Free Command
+    # Disables closed loop control of the Arm.
+    def free_cmd(self):
+        print("Free Cmd")
+        message = ArmMessage(command='FREE',
+                             response='>OK',
+                             timeout=1,
+                             cb_start=None,
+                             cb_done=None,
+                             cb_other=self._other_response_cb)
+        self._arm_uart.tx_msg_enque(message)
+
+    # Function for sending the Torque Command
+    # Enables closed loop control of the Arm.
+    def torque_cmd(self):
+        print("Torque Cmd")
+        message = ArmMessage(command='TORQUE',
+                             response='>OK',
+                             timeout=1,
+                             cb_start=None,
+                             cb_done=None,
+                             cb_other=self._other_response_cb)
+        self._arm_uart.tx_msg_enque(message)
+
+    # Function for sending the Shutdown Command
+    # Turns off the Arm.
+    def shutdown_cmd(self):
+        print("Shutdown Cmd")
+        message = ArmMessage(command='SHUTDOWN',
+                             response='>OK',
+                             timeout=1,
+                             cb_start=None,
+                             cb_done=None,
+                             cb_other=self._other_response_cb)
+        self._arm_uart.tx_msg_enque(message)
+
+    # Function for handling a Get Position End response
+
+    def _get_pos_cmd_end_cb(self, message: ArmMessage, response: str):
+        print('Position Response: {}'.format(response))
+        self._handle_position(response)
+
     # Function for called at the start of a Run Command
-    def run_cmd_start_cb(self, message: ArmMessage):
-        # store the commanded postion in the Arm Object
+    def _run_cmd_start_cb(self, message: ArmMessage):
+        # Parse the pending command and commanded postion in the Arm Object
         if message.command:
             str_arr = message.command.split()
             if len(str_arr) == 11 and str_arr[0] == 'RUN':
@@ -76,53 +123,89 @@ class ArmManager:
                 print("Invalid Run Command")
                 print(message.command)
 
-    # Function for handling a Run Command Other Response
-    def run_cmd_other_cb(self, message: ArmMessage, response: str):
-        print(response)
+    # Generic Function for handling a Other (Unexcepted) Responses
+    def _other_response_cb(self, message: ArmMessage, response: str):
+        if response:
+            str_arr = response.split()
+            if len(str_arr) > 0:
+                command = str_arr[0]
+                # Attempt to Detect the Response Type
+                if command == 'P':
+                    # Position Response
+                    self._handle_position(response)
+                elif command == '?':
+                    self._handle_status(response)
+                elif command == 'ERR':
+                    print('Error Response: {}'.format(response))
+                elif command == 'ESTOP':
+                    print('E-Stop Response: {}'.format(response))
+                elif command == 'LIMIT':
+                    print('Unexpected Limit Responses: {}'.format(response))
+                elif command == 'GRIP_OBJECT':
+                    print(response)
+                elif command == 'END':
+                    print('Unexpected End Response: {}'.format(response))
+                elif command == 'OK':
+                    print('Unexpected Limit Response: {}'.format(response))
+                elif command == '>STEP':
+                    # STEP Responses are Received During a Hard Home
+                    print('Step Response: {}'.format(response))
+                else:
+                    print('Unhandled Response: {}'.format(response))
 
     # Function for handling a Run Command End response
-    def run_cmd_end_cb(self, message: ArmMessage, response: str):
-        #
+    def _run_cmd_end_cb(self, message: ArmMessage, response: str):
+        print('Run Command Complete : {}'.format(response))
+
+    def _hard_home_cmd_done_cb(self, message: ArmMessage, response: str):
+        print("Hard Home Command Complete")
+
+    def _hard_home_cmd_start_cb(self, message: ArmMessage):
+        print("Hard Home Command Start")
+
+    def _remote_cmd_done_cb(self, message: ArmMessage, response: str):
         print(response)
+        print("Remote Command Complete")
 
-    def hard_home_cmd(self):
-        print("Hard Home Cmd")
-        message = ArmMessage(command='HARDHOME',
-                             response='>END',
-                             timeout=30,
-                             cb_start=self.hard_home_cmd_start_cb,
-                             cb_done=self.hard_home_cmd_done_cb,
-                             cb_other=self.hard_home_cmd_other_cb)
-        self._arm_uart.tx_msg_enque(message)
+    def _remote_cmd_start_cb(self, message: ArmMessage):
+        print("Remote Command Start")
 
-    def hard_home_cmd_done_cb(self, message: ArmMessage, response: str):
-        print("Hard Home Done")
+    # Function for handling a position response.
+    def _handle_position(self, response: str):
+        if response:
+            str_arr = response.split()
+            if len(str_arr) == 9 and str_arr[0] == 'P':
+                self._arm.gripper.current.count = int(str_arr[1])
+                self._arm.wrist_roll.current.count = int(str_arr[2])
+                self._arm.wrist_pitch.current.count = int(str_arr[3])
+                self._arm.elbow.current.count = int(str_arr[4])
+                self._arm.shoulder.current.count = int(str_arr[5])
+                self._arm.base.current.count = int(str_arr[6])
+                # todo handle the last two fields - don't current know their meaning.
 
-    def hard_home_cmd_other_cb(self, message: ArmMessage, response: str):
-        print(response)
+                # print('Gripper : {}'.format(str_arr[1]))
+                # print('Wrist Roll : {}'.format(str_arr[2]))
+                # print('Wrist Pitch : {}'.format(str_arr[3]))
+                # print('Elbow : {}'.format(str_arr[4]))
+                # print('Shoulder : {}'.format(str_arr[5]))
+                # print('Base : {}'.format(str_arr[6]))
 
-    def hard_home_cmd_start_cb(self, message: ArmMessage):
-        print("Hard Home Cmd Start")
+    # Function for handling a status response.
+    def _handle_status(self, response: str):
+        if response:
+            str_arr = response.split()
+            if len(str_arr) == 23 and str_arr[0] == '?':
+                # todo handle the other fields
 
-    def remote_cmd(self):
-        print("Remote Cmd")
-        message = ArmMessage(command='REMOTE',
-                             response='>OK',
-                             timeout=1,
-                             cb_start=self.remote_cmd_start_cb,
-                             cb_done=self.remote_cmd_done_cb,
-                             cb_other=self.remote_cmd_other_cb)
-        self._arm_uart.tx_msg_enque(message)
+                self._arm.gripper.current.count = int(str_arr[10])
+                self._arm.wrist_roll.current.count = int(str_arr[11])
+                self._arm.wrist_pitch.current.count = int(str_arr[12])
+                self._arm.elbow.current.count = int(str_arr[13])
+                self._arm.shoulder.current.count = int(str_arr[14])
+                self._arm.base.current.count = int(str_arr[15])
 
-    def remote_cmd_done_cb(self, message: ArmMessage, response: str):
-        print(response)
-        print("Remote Done")
-
-    def remote_cmd_other_cb(self, message: ArmMessage, response: str):
-        print(response)
-
-    def remote_cmd_start_cb(self, message: ArmMessage):
-        print("Remote Cmd Start")
+            else:
+                print('Unhandled Status: {}'.format(response))
 
 # Test Class for the Arm Maanager
 
@@ -139,10 +222,10 @@ class ArmManagerTest:
 if __name__ == "__main__":
     test = ArmManagerTest()
     test.manager.remote_cmd()
-    #test.manager.hard_home_cmd()
+    test.manager.hard_home_cmd()
     for _ in range(10):
-        test.manager.get_pos_cmd()
+        #test.manager.get_pos_cmd()
         test.manager.run_cmd(50, 1000, 1000, 20000, 0, 0, 0)
-        test.manager.get_pos_cmd()
+        #test.manager.get_pos_cmd()
         test.manager.run_cmd(50, 1000, 1000, -20000, 0, 0, 0)
-    time.sleep(180)
+    time.sleep(60)

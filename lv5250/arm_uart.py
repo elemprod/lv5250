@@ -140,7 +140,7 @@ class ArmUART:
                     if message.response:
                         if line.startswith(message.response):
                             # the correct response was received
-                            print('Response Received')
+                            #print('Response Received')
                             if message.cb_done:
                                 message.cb_done(message, line)
                             return
