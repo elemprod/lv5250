@@ -11,6 +11,9 @@ except ImportError:
 
 from arm import Arm, ArmConnectionState
 
+
+# TODO we could use callable to test if the callback is valid, might be more robust
+
 # Arm Message Definition
 # Defines a  Arm Command & Response for sending over the serial connection.
 
