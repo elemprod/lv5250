@@ -20,23 +20,26 @@ from arm import Arm, ArmConnectionState
 
 class ArmMessage:
     def __init__(self, command: str, timeout=5, response: str = None, cb_start=None, cb_done=None, cb_other=None):
-        # The command to send to send.
+        # The command to send.
         # Line endings are automatically added .
         self.command = '{}\r\n'.format(command)
         #print(self.command)
 
-        # The maximuim time to wait in seconds for a matching response
+        # The maximuim time to wait in seconds for a matching response before
+        # timing out.
         self.timeout = float(timeout)
 
-        # The response string which is anticipated to be sent by the arm to indicate
+        # The response string which is anticipated to be received fromthe arm to indicate
         # that the command has completed.
-        # This string can be specified as the full response string or just the starting
+        # This string can be specified as the full response string or just the beginning
         # part of the response.   The done callback will be made once a matching
         # respone is received is received.
         self.response = response
 
         # Function to call immediately before the command is sent.
-        # Has the form of callback(message : ArmMessage)
+        # Has the form of callback(message : ArmMessage) -> ArmMessage
+        # The returned ArmMessage overwrites the existing message providing
+        # an oppurtunity for the callback to update the pending message.
         self.cb_start = cb_start
 
         # Function to call once a matching doen response has been received or
@@ -132,36 +135,37 @@ class ArmUART:
     # Note that the function blocks.
     def tx_msg(self, message: ArmMessage):
         with self.tx_lock:
-            # Make the start callback
-            if message.cb_start:
-                message.cb_start(message)
-            # Convert the command string to bytes and send
-            self.serial.write(bytes(message.command, 'ascii'))
-            while True:
-                try:
-                    line = self.responses.get(timeout=message.timeout)
-                    if message.response:
-                        if line.startswith(message.response):
-                            # the correct response was received
-                            #print('Response Received')
+            # Make the start callback and overwrite the message.
+            if callable(message.cb_start):
+                message = message.cb_start(message)
+            if message:
+                # Convert the command string to bytes and send
+                self.serial.write(bytes(message.command, 'ascii'))
+                while True:
+                    try:
+                        line = self.responses.get(timeout=message.timeout)
+                        if message.response:
+                            if line.startswith(message.response):
+                                # the correct response was received
+                                #print('Response Received')
+                                if message.cb_done:
+                                    message.cb_done(message, line)
+                                return
+                            else:
+                                # The response didn't match the specified response.
+                                if message.cb_other:
+                                    message.cb_other(message, line)
+                                # Don't return here, get the next line.
+                        else:
+                            # no response was set so return after the first response
                             if message.cb_done:
                                 message.cb_done(message, line)
                             return
-                        else:
-                            # The response didn't match the specified response.
-                            if message.cb_other:
-                                message.cb_other(message, line)
-                            # Don't return here, get the next line.
-                    else:
-                        # no response was set so return after the first response
+                    except queue.Empty:
+                        # no response was received before the timeout expired
                         if message.cb_done:
-                            message.cb_done(message, line)
+                            message.cb_done(message, None)
                         return
-                except queue.Empty:
-                    # no response was received before the timeout expired
-                    if message.cb_done:
-                        message.cb_done(message, None)
-                    return
 
 
 if __name__ == "__main__":
