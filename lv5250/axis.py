@@ -13,30 +13,18 @@ class AxisType(Enum):
     SHOULDER = 4
     BASE = 5
 
-# Enumeration Representing the Axis's current staticmethod(
-
-
-class AxisState(Enum):
-    UNKNOWN = auto()
-    STOPPED = auto()
-    MOVING = auto()
-
-# Data Class representing a single robot arm axis.
-
 
 class Axis:
+    """
+    Class representing a single robot arm axis position.
+    """
+
     def __init__(self,
                  min_cnt=None,
-                 max_cnt=None,
-                 state=AxisState.UNKNOWN):
+                 max_cnt=None):
 
-        self._state = state
-
-        # The Axis Current Position in Encoder Counts
-        self._current = 0
-
-        # The Axis Commanded Position in Encoder Counts
-        self._command = 0
+        # The Axis Position in Encoder Counts
+        self._counts = 0
 
         # Set the hardware and software limits to the min / max count.
         if min_cnt is None:
@@ -53,7 +41,7 @@ class Axis:
             self._hw_limit_max = int(max_cnt)
             self._sw_limit_max = int(max_cnt)
 
-        # Calculate the effective limits to constrain commands to.
+        # Calculate the effective limits to constrain positions to.
         self._update_limit_max()
         self._update_limit_min()
 
@@ -67,7 +55,7 @@ class Axis:
         elif self._sw_limit_max <= self._hw_limit_max:
             self._limit_max = self._sw_limit_max
         else:
-            return self._hw_limit_max
+            self._limit_max = self._hw_limit_max
 
     def _update_limit_min(self):
         """
@@ -80,15 +68,6 @@ class Axis:
             self._limit_min = self._sw_limit_min
         else:
             self._limit_min = self._hw_limit_min
-
-    # The Current State of the Axis
-    @property
-    def state(self):
-        return self._state
-
-    @state.setter
-    def state(self, state):
-        self._state = AxisState(state)
 
     @property
     def hw_limit_max(self):
@@ -119,8 +98,8 @@ class Axis:
         """
         Set the software max limit in units of encoder counts.
 
-        The software max limit be set to less than the hardware max limit to
-        constrain the axis positions which can be commanded.
+        The software max limit can be set to less than the hardware max limit
+        to constrain the axis positions.
         """
         self._sw_limit_max = int(limit)
         self._update_limit_max()
@@ -155,16 +134,18 @@ class Axis:
         Set the axis software min limit in units of encoder counts.
 
         Can be set to greater than the hardware min limit to constrain the
-        axis positions which can be commanded.
+        axis positions.
         """
         self._sw_limit_min = int(limit)
         self._update_limit_min()
 
     def limit_check(self, counts: int) -> int:
         """
-        Function for limiting an Encoder Count Value to be within the configured
-        software and hardware limits.  Returns the limited encoder count value.
+        Function for limiting an encoder count value to be within the
+        configured software and hardware limits.  Returns the limited
+        encoder count value.
         """
+        counts = int(counts)
         if self._limit_max is not None and counts > self._limit_max:
             print('{} Limited to {}'.format(counts, self._limit_max))
             return self._limit_max
@@ -175,35 +156,21 @@ class Axis:
             return counts
 
     @property
-    def current(self) -> int:
+    def counts(self) -> int:
         """
-        Get the axis current position in units of encoder counts.
+        Get the axis position in units of encoder counts.
         """
-        return self._current
+        return self._counts
 
-    @current.setter
-    def current(self, count: int):
+    @counts.setter
+    def counts(self, counts: int):
         """
-        Set the axis current position in units of encoder counts.
-        """
-        self._current = int(count)
+        Set the axis position in units of encoder counts.
 
-    @property
-    def command(self) -> int:
-        """
-        Get the axis commanded position in units of encoder counts.
-        """
-        return self._command
-
-    @command.setter
-    def command(self, count: int):
-        """
-        Set the axis commanded position in units of encoder counts.
-
-        Note that commanded position is constrained to the Software and
+        Note that position is constrained to the Software and
         Hardware Limit's.
         """
-        self._command = self.limit_check(int(count))
+        self._counts = self.limit_check(counts)
 
 
 class RotaryAxis(Axis):
@@ -211,15 +178,19 @@ class RotaryAxis(Axis):
     Data Class representing a single rotary axis.
     """
 
-    def __init__(self, scale: float, offsett: float, min_cnt: int, max_cnt: int, state=AxisState.STOPPED):
-        super().__init__(min_cnt, max_cnt, state)
+    def __init__(self,
+                 scale: float,
+                 offsett: float,
+                 min_cnt: int,
+                 max_cnt: int):
+        super().__init__(min_cnt, max_cnt)
         self._scale = float(scale)
         self._offsett = float(offsett)
 
     @property
     def scale(self) -> float:
         """
-        Get the Axis Scale
+        Get the Axis Scale in units of degrees per encoder count.
 
         Scale is a constant used to convert a position in units
         of encoder counts to a position in units of degrees.
@@ -230,51 +201,39 @@ class RotaryAxis(Axis):
     @property
     def offsett(self) -> float:
         """
-        Get the Axis Offsett
+        Get the Axis Offsett in units of degrees.
 
         Offsett is a constant used to convert a position in units
         of encoder counts to a position in units of degrees.
-        postion (degs) = scale (deg/cnt) * position (cnts) + offsett(deg)
+        position (degs) = scale (deg/cnt) * position (cnts) + offsett(deg)
         """
         return self._offsett
 
     @property
-    def current_deg(self) -> float:
+    def degrees(self) -> float:
         """
-        Get the current axis position in units of rotary degrees.
+        Get the axis position in units of rotary degrees.
         """
-        return (self.current * self.scale) + self.offsett
+        return (self.counts * self.scale) + self.offsett
 
-    @current_deg.setter
-    def current_deg(self, degrees: float):
+    @degrees.setter
+    def degrees(self, degrees: float):
         """
-        Set the current axis position in units of rotary degrees.
+        Set the axis position in units of rotary degrees.
         """
-        self.current = round((degrees - self.offsett) / self.scale)
-
-    @property
-    def command_deg(self) -> float:
-        """
-        Get the commanded axis position in units of rotary degrees.
-        """
-        return (self.command * self.scale) + self.offsett
-
-    @command_deg.setter
-    def command_deg(self, degrees: float):
-        """
-        Set the commanded axis position in units of rotary degrees.
-        """
-        self.command = round((degrees - self.offsett) / self.scale)
+        self.counts = round((degrees - self.offsett) / self.scale)
+        #print(f'Offsett {self.offsett}')
+        #print(f'Degs Setter {degrees:.1f} / {self.counts}')
 
 
 class LinearAxis(Axis):
     """
-    Data Class representing a single rotary axis.
+    Data Class representing a single linear axis.
 
     """
 
-    def __init__(self, scale, min_cnt, max_cnt, state=AxisState.STOPPED):
-        super().__init__(min_cnt, max_cnt, state)
+    def __init__(self, scale, min_cnt, max_cnt):
+        super().__init__(min_cnt, max_cnt)
         self._scale = float(scale)
 
     @property
@@ -289,29 +248,15 @@ class LinearAxis(Axis):
         return self._scale
 
     @property
-    def current_mm(self) -> float:
+    def mm(self) -> float:
         """
-        Get the current axis position in units of mm.
+        Get the counts axis position in units of mm.
         """
-        return self.current * self.scale
+        return self.counts * self.scale
 
-    @current_mm.setter
-    def current_mm(self, mm: float):
+    @mm.setter
+    def counts_mm(self, mm: float):
         """
-        Set the current axis position in units of mm.
+        Set the counts axis position in units of mm.
         """
-        self.current = round(mm / self.scale)
-
-    @property
-    def command_mm(self) -> float:
-        """
-        Get the commanded axis position in units of mm.
-        """
-        return self.command * self.scale
-
-    @command_mm.setter
-    def command_mm(self, mm: float):
-        """
-        Set the commanded axis position in units of mm.
-        """
-        self.command = round(mm / self.scale)
+        self.counts = round(mm / self.scale)

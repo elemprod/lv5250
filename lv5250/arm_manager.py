@@ -3,6 +3,9 @@ import arm_uart
 
 from arm import Arm
 from axis import AxisType
+from axises import Axises
+from axises import AxisesGround
+
 
 from arm_uart import ArmMessage, ArmUART
 
@@ -21,16 +24,43 @@ def limit_check(value: int, limit_min: int, limit_max: int) -> int:
         return value
 
 
+class IncMoveMsg:
+    """
+    Incremental Move Object.
+    Store an incremental move information so that the new position can be
+    calculated when the message is generated.
+
+    Parameters:
+    axis:  The axis to move.
+    speed: The speed
+    counts: The distance in encoder counts to move.
+    """
+
+    def __init__(self, axis: AxisType, speed: int, counts: int):
+        self.axis = AxisType(axis)
+        self.speed = int(speed)
+        self.counts = int(counts)
+
+
 class ArmMngrMessage(ArmMessage):
     """
-    ArmMessage Subclass for internal ArmManager use.
+    Arm Message Subclass.
+
+    Parameters:
+    cb_final: The user level callback to make once the message as been sent and
+    a response is received or or the message times out.
 
     """
 
-    def __init__(self, command: str, timeout=5, response: str = None, cb_start=None, cb_done=None, cb_other=None, cb_final=None):
+    def __init__(self, command: str, timeout=5, response: str = None,
+                 cb_start=None, cb_done=None, cb_other=None, cb_final=None,
+                 axises: Axises = None, inc_move: IncMoveMsg = None):
         super().__init__(command, timeout, response, cb_start, cb_done, cb_other)
-        # The user level callback to make after the Arm object is updated.
         self.cb_final = cb_final
+        # Absolute move command Axises
+        self.axises = axises
+        # Incremental move object for an incremental move command.
+        self.inc_move = inc_move
 
 
 class ArmManager:
@@ -58,8 +88,8 @@ class ArmManager:
         Returns the Current Arm Object
 
         Parameters:
-        block: Shuld the function wait for an Arm Object to available or
-        return immediately if no object is available.
+        block: Should the function wait for an Arm Object to available or
+        return immediately if no object is available?
 
         timeout: Maximuim time to wait for the Arm Object (seconds)
 
@@ -123,9 +153,30 @@ class ArmManager:
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
+    def move_to_axises_cmd(self, speed: int, axises: Axises, cb=None) -> None:
+        """
+        Add a Move to an Absolute Position Command to the TX Que.
+
+        Parameters:
+        speed: Arm speed,  1 to 99 %
+        axises: The axises position to move to.
+        cb: Function to be called once the move has been completed or times out.
+        """
+        # Create the move command string
+        cmd_str = self._move_cmd_str(speed, axises)
+        message = ArmMngrMessage(command=cmd_str,
+                                 response='>END',
+                                 timeout=30,
+                                 cb_start=self._move_to_cmd_start_cb,
+                                 cb_done=self._cmd_done_cb,
+                                 cb_other=self._other_response_cb,
+                                 cb_final=cb,
+                                 axises=axises)
+        self._arm_uart.tx_msg_enque(message)
+
     def move_to_cmd(self, speed: int, gripper: int, wrist_roll: int, wrist_pitch: int, elbow: int, shoulder: int, base: int, cb=None) -> None:
         """
-        Add a Move an Absolute Position Command to the TX Que.
+        Add a Move to an Absolute Position Command to the TX Que.
 
         Parameters:
         speed: Arm speed,  1 to 99 %
@@ -138,17 +189,25 @@ class ArmManager:
         cb: Function to be called once the move has been completed or times out.
         """
 
-        speed = limit_check(speed, 1, 99)
-        cmd_str = 'RUN {} 0 {} {} {} {} {} {} 0 1'.format(
-            speed, gripper, wrist_roll, wrist_pitch, elbow, shoulder, base)
+        # Create an axises with the command position.
+        axises = Axises()
+        axises.gripper.counts = gripper
+        axises.wrist_roll.counts = wrist_roll
+        axises.wrist_pitch.counts = wrist_pitch
+        axises.elbow.counts = elbow
+        axises.shoulder.counts = shoulder
+        axises.base.counts = base
 
+        # Create the move command string
+        cmd_str = self._move_cmd_str(speed, axises)
         message = ArmMngrMessage(command=cmd_str,
                                  response='>END',
                                  timeout=30,
                                  cb_start=self._move_to_cmd_start_cb,
                                  cb_done=self._cmd_done_cb,
                                  cb_other=self._other_response_cb,
-                                 cb_final=cb)
+                                 cb_final=cb,
+                                 axises=axises)
         self._arm_uart.tx_msg_enque(message)
 
     def remote_cmd(self, cb=None) -> None:
@@ -166,12 +225,22 @@ class ArmManager:
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
+    def stop_cmd(self, cb=None) -> None:
+        """
+        Add a Stop Command to the TX Que.
+
+        """
+        message = ArmMngrMessage(command='STOP',
+                                 response='>OK',
+                                 timeout=5,
+                                 cb_done=self._cmd_done_cb,
+                                 cb_other=self._other_response_cb,
+                                 cb_final=cb)
+        self._arm_uart.tx_msg_enque(message)
+
     def close_gripper_cmd(self, cb=None) -> None:
         """
         Add a Close Gripper Command to the TX Que.
-
-        The remote command notifies the Arm the the Serial Interface is Active
-        and generally only needs to be sent once to enable serial control.
         """
         message = ArmMngrMessage(command='MOVE 50 0 1',
                                  response='>OK',
@@ -289,40 +358,81 @@ class ArmManager:
         # position when it encounters a limit switch.
         self.get_pos_cmd(cb)
 
+    def move_to_cal(self, cb=None) -> None:
+        """
+        Move the Arm to Calibration Position.
+
+        The upper arm linkage will be parallel to the ground.
+        The lower arm linkage will be at a right angle to the ground.
+        The Wrist Pitch will be at a right angle to the ground.
+
+        """
+        self.remote_cmd()
+        self.clear_estop_cmd()
+        self.stop_cmd()
+        self.hard_home_cmd()
+
+        axises = Axises()
+        axises.shoulder.degrees = 0
+        self.move_to_axises_cmd(50, axises)
+        axises.wrist_pitch.counts = 0
+        # self.move_to_axises_cmd(50, axises)
+        # axises.elbow.degrees = -90
+        # self.move_to_axises_cmd(50, axises)
+
     def move_inc_cmd(self, axis: AxisType, speed: int, counts: int, cb=None) -> None:
         """
         Add an Incremental Move Command to the TX Que.
 
-        Moves a single axis by a distance from its current location.
-        Note that it is assumed the interal Arm object contains the current
-        arm position.  If this is not the case, an arm position update should
-        be requested first.
+        Moves a single axis by a distance from the last commanded position.
 
         Parameters:
         axis: The axis to move.
         speed: Arm speed 1 to 99 %
-        counts: Distance to move (encoder counts)
+        counts: Incremental distance to move (encoder counts)
         cb: Function to be called once the Shutdown Command completes or
         it times out.
         """
+
+        incremental = IncMoveMsg(axis, speed, counts)
+
         message = ArmMngrMessage(command=None,
-                                 response='>OK',
+                                 response='>END',
                                  timeout=30,
                                  cb_start=self._move_inc_cmd_start_cb,
                                  cb_done=self._cmd_done_cb,
                                  cb_other=self._other_response_cb,
-                                 cb_final=cb)
-        message.axis = axis
-        message.speed = speed
-        message.counts = counts
+                                 cb_final=cb,
+                                 inc_move=incremental)
         self._arm_uart.tx_msg_enque(message)
 
     def _move_inc_cmd_start_cb(self, message: ArmMngrMessage) -> ArmMngrMessage:
         """
-        Move Incremental Start Callback
+        Move Incremental Start Callback.
+
+        Create a move message by adding the incremental move to the
+        last commanded position.
         """
-        if message.axis == AxisType.BASE:
-            pass
+        # Add the incremental move to the correct axis
+        if message.inc_move.axis == AxisType.GRIPPER:
+            self._arm_local.command.gripper.counts += message.inc_move.counts
+        elif message.inc_move.axis == AxisType.WRIST_ROLL:
+            self._arm_local.command.wrist_roll.counts += message.inc_move.counts
+        elif message.inc_move.axis == AxisType.WRIST_PITCH:
+            self._arm_local.command.wrist_pitch.counts += message.inc_move.counts
+        elif message.inc_move.axis == AxisType.ELBOW:
+            self._arm_local.command.elbow.counts += message.inc_move.counts
+        elif message.inc_move.axis == AxisType.SHOULDER:
+            self._arm_local.command.shoulder.counts += message.inc_move.counts
+        elif message.inc_move.axis == AxisType.BASE:
+            self._arm_local.command.base.counts += message.inc_move.counts
+
+        # Generate the command string
+        message.command = self._move_cmd_str(
+            message.inc_move.speed, self._arm_local.command)
+        print('Incremental Move Msg: {}'.format(message.command))
+        self._arm_update(self._arm_local)
+        return message
 
     def _arm_update(self, arm: Arm):
         """
@@ -356,20 +466,9 @@ class ArmManager:
 
     # Function called at the start of a Run Command
     def _move_to_cmd_start_cb(self, message: ArmMngrMessage) -> ArmMngrMessage:
-        # Parse the pending commanded postion and update in the Arm Object
-        if message.command:
-            str_arr = message.command.split()
-            if len(str_arr) == 11 and str_arr[0] == 'RUN':
-                self._arm_local.gripper.command = int(str_arr[3])
-                self._arm_local.wrist_roll.command = int(str_arr[4])
-                self._arm_local.wrist_pitch.command = int(str_arr[5])
-                self._arm_local.elbow.command = int(str_arr[6])
-                self._arm_local.shoulder.command = int(str_arr[7])
-                self._arm_local.base.command = int(str_arr[8])
-                self._arm_update(self._arm_local)
-            else:
-                print("Invalid Run Command")
-                print(message.command)
+        # Update in the Arm Object with the new command.
+        self._arm_local.command = message.axises
+        self._arm_update(self._arm_local)
         return message
 
     def _cmd_done_cb(self, message: ArmMngrMessage, response: str):
@@ -422,12 +521,12 @@ class ArmManager:
         if response:
             str_arr = response.split()
             if len(str_arr) == 9 and str_arr[0] == 'P':
-                self._arm_local.gripper.current = int(str_arr[1])
-                self._arm_local.wrist_roll.current = int(str_arr[2])
-                self._arm_local.wrist_pitch.current = int(str_arr[3])
-                self._arm_local.elbow.current = int(str_arr[4])
-                self._arm_local.shoulder.current = int(str_arr[5])
-                self._arm_local.base.current = int(str_arr[6])
+                self._arm_local.position.gripper.counts = int(str_arr[1])
+                self._arm_local.position.wrist_roll.counts = int(str_arr[2])
+                self._arm_local.position.wrist_pitch.counts = int(str_arr[3])
+                self._arm_local.position.elbow.counts = int(str_arr[4])
+                self._arm_local.position.shoulder.counts = int(str_arr[5])
+                self._arm_local.position.base.counts = int(str_arr[6])
                 self._arm_update(self._arm_local)
                 print(response)
                 # TODO:  handle the last two fields but we don't know their meaning
@@ -451,12 +550,12 @@ class ArmManager:
                 # TODO:  handle the other fields
                 self._limit_decode(int(str_arr[8]))
 
-                self._arm_local.gripper.current = int(str_arr[10])
-                self._arm_local.wrist_roll.current = int(str_arr[11])
-                self._arm_local.wrist_pitch.current = int(str_arr[12])
-                self._arm_local.elbow.current = int(str_arr[13])
-                self._arm_local.shoulder.current = int(str_arr[14])
-                self._arm_local.base.current = int(str_arr[15])
+                self._arm_local.position.gripper.counts = int(str_arr[10])
+                self._arm_local.position.wrist_roll.counts = int(str_arr[11])
+                self._arm_local.position.wrist_pitch.counts = int(str_arr[12])
+                self._arm_local.position.elbow.counts = int(str_arr[13])
+                self._arm_local.position.shoulder.counts = int(str_arr[14])
+                self._arm_local.position.base.counts = int(str_arr[15])
                 self._arm_update(self._arm_local)
                 #print(response)
             else:
@@ -475,23 +574,137 @@ class ArmManager:
                 print('Wrist Pitch Limit Switch')
             if limit & (1 << AxisType.WRIST_ROLL.value):
                 print('Wrist Roll Center Switch')
+            if limit & (1 << AxisType.GRIPPER.value):
+                print('Gripper Limit')
+
+    def _move_cmd_str(self, speed: int, axises: Axises) -> str:
+        """
+        Create a Move Command Message String from the
+        supplied Axises object
+        """
+        speed = limit_check(speed, 1, 99)
+        return 'RUN {} 0 {} {} {} {} {} {} 0 1'.format(
+                speed,
+                axises.gripper.counts,
+                axises.wrist_roll.counts,
+                axises.wrist_pitch.counts,
+                axises.elbow.counts,
+                axises.shoulder.counts,
+                axises.base.counts)
+
+    def run_test_cmd(self):
+
+        speed = 50
+        # paramater 1 - uknown
+        par_1 = 0         # doesn't see to change anything
+        gripper = 5000
+        wrist_roll = 0
+        wrist_pitch = 0
+        elbow = 0
+        shoulder = 0
+        base = 0
+        par8 = 0
+        par9 = 0
+
+        cmd_str = 'RUN {} {} {} {} {} {} {} {} {} {}'.format(
+                speed,
+                par_1,
+                gripper,
+                wrist_roll,
+                wrist_pitch,
+                elbow,
+                shoulder,
+                base,
+                par8,
+                par9)
+        print(cmd_str)
+        message = ArmMngrMessage(command=cmd_str,
+                                 response='>END',
+                                 timeout=30,
+                                 cb_done=self._cmd_done_cb,
+                                 cb_other=self._other_response_cb)
+        self._arm_uart.tx_msg_enque(message)
 
 
-class ArmManagerTest:
-    # Serial Port
-    PORT = '/dev/cu.usbserial-FT5ZVFRV'
+def print_abs_cb(arm):
+    print(f'Wrist Pitch {arm.position.wrist_pitch.counts} cnts')
+    print(f'Wrist Pitch {arm.position.wrist_pitch.degrees:.1f} deg')
+    print(f'Elbow {arm.position.elbow.counts} cnts')
+    print(f'Elbow {arm.position.elbow.degrees:.1f} deg')
+    print(f'Shoulder {arm.position.shoulder.counts} cnts')
+    print(f'Shoulder {arm.position.shoulder.degrees:.1f} deg')
+    #print('Base {} deg'.format(arm.position.base.degrees))
 
-    def __init__(self):
-        print("Arm Manager Test Init")
-        self.manager = ArmManager(ArmManagerTest.PORT)
+    # Print the ground referenced angles
+    abs = arm.position.absolute
+
+    print(
+        f'Absolute - Wrist Pitch: {abs.wrist_pitch:.1f}, Elbow: {abs.elbow:.1f}, Shoulder: {abs.shoulder:.1f} (degs)')
+
+
+def done_print_cb(arm):
+    print('Wrist Roll {} deg'.format(arm.position.wrist_roll.degrees))
+    print('Wrist Pitch {} deg'.format(arm.position.wrist_pitch.degrees))
+    print('Elbow {} deg'.format(arm.position.elbow.degrees))
+    print('Shoulder {} deg'.format(arm.position.shoulder.degrees))
+    print('Base {} deg'.format(arm.position.base.degrees))
 
 
 if __name__ == "__main__":
-    test = ArmManagerTest()
-    test.manager.remote_cmd()
-    test.manager.clear_estop_cmd()
-    #test.manager.hard_home_cmd()
-    test.manager.move_to_cmd(99, 0, -100000, 0, 0, 0, 0)
+
+    PORT = '/dev/cu.usbserial-FT5ZVFRV'
+    arm = ArmManager(PORT)
+
+    #arm.move_to_cal()
+    arm.remote_cmd()
+    arm.clear_estop_cmd()
+    arm.stop_cmd()
+
+    #arm.move_to_limit_cmd(AxisType.WRIST_PITCH, -10, print_abs_cb)
+
+    #arm.hard_home_cmd()
+
+    #Create an axises with the command position.
+    axises = Axises()
+    axises.gripper.counts = 0
+    axises.wrist_roll.counts = 0
+    axises.wrist_pitch.degrees = -45
+    axises.elbow.degrees = -90
+    axises.shoulder.degrees = 90
+    axises.base.counts = 0
+    arm.move_to_axises_cmd(99, axises)
+    arm.get_pos_cmd(print_abs_cb)
+
+    axises.wrist_pitch.degrees = 70
+    arm.move_to_axises_cmd(99, axises)
+    arm.get_pos_cmd(print_abs_cb)
+
+    axises.wrist_pitch.degrees = -45
+    axises.shoulder.degrees = 45
+    arm.move_to_axises_cmd(99, axises)
+    arm.get_pos_cmd(print_abs_cb)
+
+    axises.wrist_pitch.degrees = 70
+    axises.shoulder.degrees = 0
+    arm.move_to_axises_cmd(99, axises)
+    arm.get_pos_cmd(print_abs_cb)
+
+    axises.wrist_pitch.degrees = 35
+    axises.shoulder.degrees = 100
+    arm.move_to_axises_cmd(99, axises)
+    arm.get_pos_cmd(print_abs_cb)
+
+    # test.manager.move_to_cmd(99, 0, 0, 0, 0, 0, 0)
+    # test.manager.get_pos_cmd()
+    # test.manager.move_to_cmd(99, 0, 0, 0, 0, 0, 50000)
+    # test.manager.get_pos_cmd()
+    # test.manager.move_inc_cmd(AxisType.BASE, 50, -100000)
+    # test.manager.get_pos_cmd()
+
+    #test.manager.move_inc_cmd(AxisType.SHOULDER, 50, 2000)
+    #test.manager.move_to_cmd(99, 0, 0, 0, 0, 0, 50000)
+
+    #test.manager.move_to_cmd(99, 0, -100000, 0, 0, 0, 0)
     #test.manager.close_gripper_cmd()
     #test.manager.move_to_cmd(99, 0, 0, 0, 0, 0, 0)
     #test.manager.move_to_cmd(99, 100000, 0, 0, 0, 0, 0)

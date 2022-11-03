@@ -12,13 +12,14 @@ except ImportError:
 from arm import Arm, ArmConnectionState
 
 
-# TODO we could use callable to test if the callback is valid, might be more robust
-
-# Arm Message Definition
-# Defines a  Arm Command & Response for sending over the serial connection.
-
-
 class ArmMessage:
+    """
+    Arm Message Definition
+    Defines a  Arm Command & Response to send over the serial connection.
+    Multiple call backs are defined so that the message can be altered prior
+    to sending and the results can be processed by the higher level code.
+    """
+
     def __init__(self, command: str, timeout=5, response: str = None, cb_start=None, cb_done=None, cb_other=None):
         # The command to send.
         # Line endings are automatically added .
@@ -33,7 +34,7 @@ class ArmMessage:
         # that the command has completed.
         # This string can be specified as the full response string or just the beginning
         # part of the response.   The done callback will be made once a matching
-        # respone is received is received.
+        # respone has received or the time out happens.
         self.response = response
 
         # Function to call immediately before the command is sent.
@@ -47,7 +48,7 @@ class ArmMessage:
         # Has the form of callback(message : ArmMessage, response : str)
         self.cb_done = cb_done
 
-        # Function to call when a respones other than the done responnse is received.
+        # Function to call when a respones other than the done responnse has been received.
         # Other responses will be ignored if set to None
         # Has the form of callback(message : ArmMessage, response : str)
         self.cb_other = cb_other
@@ -105,6 +106,8 @@ class ArmUART:
 
     # loop for adding serial messages to the responses que
     def _rx_loop(self):
+        # clear out the rx buffer before starting
+        self.serial.read_all()
         while self.serial.isOpen:
             line = self.serial.readline()
             # Remove the line endings and leading / trailing spaces
@@ -135,7 +138,8 @@ class ArmUART:
     # Note that the function blocks.
     def tx_msg(self, message: ArmMessage):
         with self.tx_lock:
-            # Make the start callback and overwrite the message.
+            # Make the start callback and overwrite the message with the one
+            # that's returned.
             if callable(message.cb_start):
                 message = message.cb_start(message)
             if message:
@@ -146,24 +150,25 @@ class ArmUART:
                         line = self.responses.get(timeout=message.timeout)
                         if message.response:
                             if line.startswith(message.response):
-                                # the correct response was received
+                                # The correct response was received
                                 #print('Response Received')
-                                if message.cb_done:
+                                if callable(message.cb_done):
                                     message.cb_done(message, line)
                                 return
                             else:
-                                # The response didn't match the specified response.
-                                if message.cb_other:
+                                # The response didn't match the anticipated response.
+                                if callable(message.cb_other):
                                     message.cb_other(message, line)
-                                # Don't return here, get the next line.
+                                # Don't return here, check the next responsnes.
                         else:
-                            # no response was set so return after the first response
-                            if message.cb_done:
+                            # No anticipated response was set so return after
+                            # the first response is received.
+                            if callable(message.cb_done):
                                 message.cb_done(message, line)
                             return
                     except queue.Empty:
                         # no response was received before the timeout expired
-                        if message.cb_done:
+                        if callable(message.cb_done):
                             message.cb_done(message, None)
                         return
 
