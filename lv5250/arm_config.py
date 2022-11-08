@@ -14,9 +14,10 @@ class ArmConfig:
     movements to avoid triiggering the hardware limit switches.
 
     Note that the specified limits are only valid after the Arm has completed a
-    Hard Home movement to set it's zero points.
+    Hard Home movement at power up to set it's internal zero points.
 
-    Note that Robot Arm must be a calibrated for best results.
+    Note that Robot Arm must be a calibrated using the hand pendant.  The
+    calibration procedure is described in the following video.
 
     https://youtu.be/ErEE73Acwwg
     """
@@ -42,31 +43,23 @@ class ArmConfig:
     WRIST_ROLL_MIN = None
     WRIST_ROLL_MAX = None
 
-    # Wrist Pitch Axis.  Angle with respect to Elbow Axis.
+    # Wrist Pitch Axis.  Angle with respect to the Base Axis / Ground.
     WRIST_PITCH_SCALE = -1/567.54   # Angular degrees per encoder count
-    WRIST_PITCH_OFFSETT_DEG = 0   # Wrist to elbow angle at zero counts.
+    WRIST_PITCH_OFFSETT_DEG = 0     # Wrist to elbow angle at zero counts.
     WRIST_PITCH_MIN = -39728        # Counts at Neg. Limit Switch (70 deg)
     WRIST_PITCH_MAX = 25540         # Counts at Pos. Limit Switch (-45 deg)
 
-    # The Elbow Axis Angle with Respect to Shoulder Axis
+    # The Elbow Axis Angle with respect to the Base Axis / Ground.
     ELBOW_SCALE = -1/659.785        # Angular degrees per encoder count
-    ELBOW_OFFSETT_DEG = -90         # Elbow to shoulder angle at zero counts.
-
-    # Note the nominal offsett value of -90 deg may not be perfectly match a
-    # particular arm since the limit switch position is adjustable.
+    ELBOW_OFFSETT_DEG = 0           # Elbow angle at zero counts.
     ELBOW_MIN = -146471             # Counts at Neg. Limit Switch (132 deg)
     ELBOW_MAX = 13195               # Counts at Pos. Limit Switch (-110 deg)
 
-    # Shoulder Angle with respect to Base Axis / Ground.
+    # Shoulder Axis Angle with respect to the Base Axis / Ground.
     SHOULDER_SCALE = 1/659.785      # Angular degrees per encoder count
-    SHOULDER_OFFSETT_DEG = 108      # Shoulder to ground angle at zero counts.
-
-    # Note the nominal offsett value of 108 deg may not be perfectly match a
-    # particular arm since the limit switch position is adjustable.  A more
-    # exact value can be determined by adjusting this offsett so the arm's
-    # position at the 0 and 98 deg points matches that measured with a level.
-    SHOULDER_MIN = -104245          # Counts at Neg. Limit Switch (-50 deg)
-    SHOULDER_MAX = 2638             # Counts at Pos. Limit Switch (112 deg)
+    SHOULDER_OFFSETT_DEG = 108      # Shoulder angle at zero counts.
+    SHOULDER_MIN = -91058           # Counts at Neg. Limit Switch (-30 deg)
+    SHOULDER_MAX = 7928             # Counts at Pos. Limit Switch (120 deg)
 
     # Base Rotation
     BASE_SCALE = 1/659.785          # Angular degrees per encoder count
