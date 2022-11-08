@@ -16,7 +16,11 @@ class AxisType(Enum):
 
 class Axis:
     """
-    Class representing a single robot arm axis position.
+    Class representing a a single Robot Arm's axis position in native units
+    of encoder counts.
+
+    The axis software and hardware limits can be configured to constrain the
+    axis poisition.
     """
 
     def __init__(self,
@@ -139,7 +143,7 @@ class Axis:
         self._sw_limit_min = int(limit)
         self._update_limit_min()
 
-    def limit_check(self, counts: int) -> int:
+    def counts_limit(self, counts: int) -> int:
         """
         Function for limiting an encoder count value to be within the
         configured software and hardware limits.  Returns the limited
@@ -147,10 +151,12 @@ class Axis:
         """
         counts = int(counts)
         if self._limit_max is not None and counts > self._limit_max:
-            print('{} Limited to {}'.format(counts, self._limit_max))
+            print('{} Counts Limited to {} Counts'.format(
+                counts, self._limit_max))
             return self._limit_max
         elif self._limit_min is not None and counts < self._limit_min:
-            print('{} Limited to {}'.format(counts, self._limit_min))
+            print('{} Counts Limited to {} Counts'.format(
+                counts, self._limit_min))
             return self._limit_min
         else:
             return counts
@@ -170,7 +176,7 @@ class Axis:
         Note that position is constrained to the Software and
         Hardware Limit's.
         """
-        self._counts = self.limit_check(counts)
+        self._counts = self.counts_limit(counts)
 
 
 class RotaryAxis(Axis):
@@ -192,7 +198,7 @@ class RotaryAxis(Axis):
         """
         Get the Axis Scale in units of degrees per encoder count.
 
-        Scale is a constant used to convert a position in units
+        Scale is the constant used to convert a position in units
         of encoder counts to a position in units of degrees.
         postion (degs) = scale (deg/cnt) * position (cnts) + offsett(deg)
         """
@@ -212,18 +218,33 @@ class RotaryAxis(Axis):
     @property
     def degrees(self) -> float:
         """
-        Get the axis position in units of rotary degrees.
+        Get the axis angle in units of rotary degrees.
+
+        Note that the axis is stored in the arm's native units of encoder
+        counts.  This method converts encoder counts to degrees when called.
         """
         return (self.counts * self.scale) + self.offsett
 
     @degrees.setter
     def degrees(self, degrees: float):
         """
-        Set the axis position in units of rotary degrees.
+        Set the axis angle in units of rotary degrees.
         """
+        degrees = self.angle_limit(degrees)
         self.counts = round((degrees - self.offsett) / self.scale)
         #print(f'Offsett {self.offsett}')
         #print(f'Degs Setter {degrees:.1f} / {self.counts}')
+
+    def angle_limit(self, degrees: float) -> float:
+        """
+        Convert  angles outside of +/- 180 deg to an equivalent angle limited
+        to the range.
+        """
+        while degrees > 180:
+            degrees = degrees - 360
+        while degrees < -180:
+            degrees = degrees + 360
+        return degrees
 
 
 class LinearAxis(Axis):
@@ -250,7 +271,7 @@ class LinearAxis(Axis):
     @property
     def mm(self) -> float:
         """
-        Get the counts axis position in units of mm.
+        Get the axis position in units of mm.
         """
         return self.counts * self.scale
 
