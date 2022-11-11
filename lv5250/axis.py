@@ -30,7 +30,7 @@ class Axis:
 
     Parameters:
 
-    cb_update: Callback to make when the encodder value is set.
+    cb_update: Callback to make when the encoder value is set.
 
     min_cnt: The minimuim value to limit encoder count too.
 
@@ -64,8 +64,8 @@ class Axis:
 
     def cnt_max(self) -> int:
         """
-        Function for getting the axis maximuim encoder count limit to be the
-        lesser of the hardware and software limit.
+        Get the axis maximuim encoder count limit.
+        The limit is the lesser of the hardware and software limit.
         """
         if self._hw_cnt_max is None:
             return self._sw_cnt_max
@@ -78,8 +78,8 @@ class Axis:
 
     def cnt_min(self) -> int:
         """
-        Function for updating the axis minimuim encoder count limit to be the
-        greater of the hardware and software limit.
+        Get the axis minimuim encoder count limit.
+        The limit is the greater of the hardware and software limit.
         """
         if self._hw_cnt_min is None:
             return self._sw_cnt_min
@@ -98,7 +98,7 @@ class Axis:
         return self._hw_cnt_max
 
     @hw_cnt_max.setter
-    def hw_cnt_max(self, limit):
+    def hw_cnt_max(self, limit: int):
         """
         Set the hardware max limit in units of encoder counts.
 
@@ -114,7 +114,7 @@ class Axis:
         return self._sw_cnt_max
 
     @sw_cnt_max.setter
-    def sw_cnt_max(self, limit):
+    def sw_cnt_max(self, limit: int):
         """
         Set the software max limit in units of encoder counts.
 
@@ -133,7 +133,7 @@ class Axis:
         return self._hw_cnt_min
 
     @hw_cnt_min.setter
-    def hw_cnt_min(self, limit):
+    def hw_cnt_min(self, limit: int):
         """
         Set the hardware min limit in units of encoder counts.
         """
@@ -147,7 +147,7 @@ class Axis:
         return self._sw_cnt_min
 
     @sw_cnt_min.setter
-    def sw_cnt_min(self, limit):
+    def sw_cnt_min(self, limit: int):
         """
         Set the axis software min limit in units of encoder counts.
 
@@ -407,8 +407,8 @@ class RotaryAxisRelative(RotaryAxis):
 
     def update(self):
         """
-        Make the associated axis relative angle limit checks and update the
-        axis angle.  This can be called when the associated axis changes to
+        Update the axis angle after making the associated axis relative angle
+        limit checks.  This can be called when the associated axis changes to
         limit check the new relative axis angle.
         """
         angle = self.angle

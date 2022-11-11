@@ -4,7 +4,6 @@ import arm_uart
 from arm import Arm
 from axis import AxisType
 from axises import Axises
-from axises import AxisesGround
 
 
 from arm_uart import ArmMessage, ArmUART

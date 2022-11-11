@@ -4,28 +4,6 @@ from axis import LinearAxis, RotaryAxis, RotaryAxisRelative, AxisType
 from arm_config import ArmConfig
 
 
-class AxisesGround:
-
-    #TODO no longer valid with new method of referencig all axis to ground.
-
-    """
-    Class representing the angle of each axises in degrees referenced to
-    the ground or the absolute axis angle.  The angle of each axis with
-    respect to ground is dependent  the sume on the angles of the previous
-    joints and therefore must be calculated.
-
-    Parameters:
-    wrist_pitch: The absolute angle of the wrist in degrees.
-    elbow: The absolute angle of the eblow in degrees.
-    shoulder: The absolute angle of the shoulder in degrees.
-    """
-
-    def __init__(self, wrist_pitch: float, elbow: float, shoulder: float):
-        self.wrist_pitch = wrist_pitch
-        self.elbow = elbow
-        self.shoulder = shoulder
-
-
 class Axises:
     """
     Class representing a collection LabVolt 5250 robot axis positions.
@@ -128,6 +106,7 @@ class Axises:
         elbow axis.
         """
         self.elbow.update()
+        self.wrist_pitch.update()
 
     def _elbow_angle(self):
         """
