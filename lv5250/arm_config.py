@@ -46,16 +46,19 @@ class ArmConfig:
     # Wrist Pitch Axis.  Angle with respect to the Base Axis / Ground.
     WRIST_PITCH_SCALE = -1/567.54   # Angular degrees per encoder count
     WRIST_PITCH_OFFSETT_DEG = 0     # Wrist to elbow angle at zero counts.
-    WRIST_PITCH_MIN = -39728        # Counts at Neg. Limit Switch (70 deg)
-    WRIST_PITCH_MAX = 25540         # Counts at Pos. Limit Switch (-45 deg)
+    ELBOW_TO_WRIST_PITCH_MIN_DEG = -60    # Minimuin Relative Angle
+    ELBOW_TO_WRIST_PITCH_MAX_DEG = 85     # Maximuin relative Angle
 
-    # The Elbow Axis Angle with respect to the Base Axis / Ground.
+    # The Elbow Axis Angle with respect to ground.
     ELBOW_SCALE = -1/659.785        # Angular degrees per encoder count
     ELBOW_OFFSETT_DEG = 0           # Elbow angle at zero counts.
-    ELBOW_MIN = -146471             # Counts at Neg. Limit Switch (132 deg)
-    ELBOW_MAX = 13195               # Counts at Pos. Limit Switch (-110 deg)
 
-    # Shoulder Axis Angle with respect to the Base Axis / Ground.
+    # Elbow Axis position must be constrained with respect the the
+    # shoulder axis angle to avoid tripping the limit switch.
+    SHOULDER_TO_ELBOW_MIN_DEG = -125    # Minimuin Relative Angle
+    SHOULDER_TO_ELBOW_MAX_DEG = 125     # Maximuin relative Angle
+
+    # Shoulder Axis Angle with respect to Ground.
     SHOULDER_SCALE = 1/659.785      # Angular degrees per encoder count
     SHOULDER_OFFSETT_DEG = 108      # Shoulder angle at zero counts.
     SHOULDER_MIN = -91058           # Counts at Neg. Limit Switch (-30 deg)

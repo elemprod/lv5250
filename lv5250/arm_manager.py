@@ -338,6 +338,7 @@ class ArmManager:
         cb: Function to be called once the Shutdown Command completes or
         it times out.
         """
+
         if speed < 0:
             dir = -1    # reverse
         else:
@@ -373,11 +374,11 @@ class ArmManager:
         self.hard_home_cmd()
 
         axises = Axises()
-        axises.shoulder.degrees = 0
+        axises.shoulder.angle = 0
         self.move_to_axises_cmd(50, axises)
         axises.wrist_pitch.counts = 0
         # self.move_to_axises_cmd(50, axises)
-        # axises.elbow.degrees = -90
+        # axises.elbow.angle = -90
         # self.move_to_axises_cmd(50, axises)
 
     def move_inc_cmd(self, axis: AxisType, speed: int, counts: int, cb=None) -> None:
@@ -626,28 +627,17 @@ class ArmManager:
         self._arm_uart.tx_msg_enque(message)
 
 
-def print_abs_cb(arm):
-    print(f'Wrist Pitch {arm.position.wrist_pitch.counts} cnts')
-    print(f'Wrist Pitch {arm.position.wrist_pitch.degrees:.1f} deg')
-    print(f'Elbow {arm.position.elbow.counts} cnts')
-    print(f'Elbow {arm.position.elbow.degrees:.1f} deg')
-    print(f'Shoulder {arm.position.shoulder.counts} cnts')
-    print(f'Shoulder {arm.position.shoulder.degrees:.1f} deg')
-    #print('Base {} deg'.format(arm.position.base.degrees))
-
-    # Print the ground referenced angles
-    abs = arm.position.absolute
-
-    print(
-        f'Absolute - Wrist Pitch: {abs.wrist_pitch:.1f}, Elbow: {abs.elbow:.1f}, Shoulder: {abs.shoulder:.1f} (degs)')
-
-
 def done_print_cb(arm):
-    print('Wrist Roll {} deg'.format(arm.position.wrist_roll.degrees))
-    print('Wrist Pitch {} deg'.format(arm.position.wrist_pitch.degrees))
-    print('Elbow {} deg'.format(arm.position.elbow.degrees))
-    print('Shoulder {} deg'.format(arm.position.shoulder.degrees))
-    print('Base {} deg'.format(arm.position.base.degrees))
+    print(
+        f'Wrist Roll: {arm.position.wrist_roll.counts} cnts / {arm.position.wrist_roll.angle:.1f} deg')
+    print(
+        f'Wrist Pitch: {arm.position.wrist_pitch.counts} cnts / {arm.position.wrist_pitch.angle:.1f} deg')
+    print(
+        f'Elbow: {arm.position.elbow.counts} cnts / {arm.position.elbow.angle:.1f} deg')
+    print(
+        f'Shoulder: {arm.position.shoulder.counts} cnts / {arm.position.shoulder.angle:.1f} deg')
+    print(
+        f'Base: {arm.position.base.counts} cnts / {arm.position.base.angle:.1f} deg')
 
 
 if __name__ == "__main__":
@@ -660,59 +650,47 @@ if __name__ == "__main__":
     arm.clear_estop_cmd()
     arm.stop_cmd()
 
-    #arm.move_to_limit_cmd(AxisType.WRIST_PITCH, -10, print_abs_cb)
-
     #arm.hard_home_cmd()
 
     #Create an axises with the command position.
-    axises = Axises()
+
+    axises = Axises(limits_en=True)
     axises.gripper.counts = 0
-    axises.wrist_roll.counts = 0
-    axises.wrist_pitch.degrees = -45
-    axises.elbow.degrees = -90
-    axises.shoulder.degrees = 90
-    axises.base.counts = 0
-    arm.move_to_axises_cmd(99, axises)
-    arm.get_pos_cmd(print_abs_cb)
+    axises.wrist_roll.angle = 90
+    axises.shoulder.angle = 90
+    axises.elbow.angle = 90
+    axises.wrist_pitch.angle = 90
+    axises.base.angle = 0
 
-    axises.wrist_pitch.degrees = 70
-    arm.move_to_axises_cmd(99, axises)
-    arm.get_pos_cmd(print_abs_cb)
+    arm.move_to_axises_cmd(50, axises, done_print_cb)
+    axises.shoulder.angle = 110
+    axises.elbow.angle = 240
+    axises.wrist_pitch.angle = 180
 
-    axises.wrist_pitch.degrees = -45
-    axises.shoulder.degrees = 45
-    arm.move_to_axises_cmd(99, axises)
-    arm.get_pos_cmd(print_abs_cb)
+    arm.move_to_axises_cmd(50, axises, done_print_cb)
 
-    axises.wrist_pitch.degrees = 70
-    axises.shoulder.degrees = 0
-    arm.move_to_axises_cmd(99, axises)
-    arm.get_pos_cmd(print_abs_cb)
+    #arm.get_pos_cmd(done_print_cb)
 
-    axises.wrist_pitch.degrees = 35
-    axises.shoulder.degrees = 100
-    arm.move_to_axises_cmd(99, axises)
-    arm.get_pos_cmd(print_abs_cb)
+    #axises.wrist_pitch.angle = -10
+    #arm.move_to_axises_cmd(50, axises)
 
-    # test.manager.move_to_cmd(99, 0, 0, 0, 0, 0, 0)
-    # test.manager.get_pos_cmd()
-    # test.manager.move_to_cmd(99, 0, 0, 0, 0, 0, 50000)
-    # test.manager.get_pos_cmd()
-    # test.manager.move_inc_cmd(AxisType.BASE, 50, -100000)
-    # test.manager.get_pos_cmd()
+    #arm.get_pos_cmd(done_print_cb)
 
-    #test.manager.move_inc_cmd(AxisType.SHOULDER, 50, 2000)
-    #test.manager.move_to_cmd(99, 0, 0, 0, 0, 0, 50000)
+    # axises.wrist_pitch.angle = 45
+    # axises.elbow.angle = 0
+    # axises.shoulder.angle = 0
+    # axises.base.angle = 0
+    # arm.move_to_axises_cmd(50, axises)
+    # arm.get_pos_cmd(done_print_cb)
+    #
+    # axises.wrist_pitch.angle = 0
+    # axises.elbow.angle = 0
+    # axises.shoulder.angle = -30
+    # axises.base.angle = 0
+    # arm.move_to_axises_cmd(50, axises)
+    # arm.get_pos_cmd(done_print_cb)
 
-    #test.manager.move_to_cmd(99, 0, -100000, 0, 0, 0, 0)
-    #test.manager.close_gripper_cmd()
-    #test.manager.move_to_cmd(99, 0, 0, 0, 0, 0, 0)
-    #test.manager.move_to_cmd(99, 100000, 0, 0, 0, 0, 0)
-    #test.manager.hard_home_cmd()
-    #time.sleep(20)
-    # for _ in range(100):
-    #     test.manager.get_pos_cmd()
-    #     test.manager.move_to_cmd(99, 0, 1000, 3000, 0, 0, 0)
-    #     test.manager.get_pos_cmd()
-    #     test.manager.move_to_cmd(99, 0, 1000, -3000, 0, 0, 0)
-    time.sleep(60)
+    #arm.move_to_limit_cmd(AxisType.SHOULDER, -10, print_abs_cb)
+    #arm.get_pos_cmd(print_abs_cb)
+
+    time.sleep(120)

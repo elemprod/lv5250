@@ -24,14 +24,16 @@ class Arm:
         self.state = ArmConnectionState.UNKNOWN
 
         """
-        The current arm position
+        The current arm position.  Position limits disabled so the position
+        is stored even if it is outside of the limts.
         """
-        self.position = Axises()
+        self.position = Axises(False)
 
         """
-        The commanded Arm Position.
+        The commanded Arm Position.  Position limits enabled to protect the
+        Arm from being commanded to an invalid position.
         """
-        self.command = Axises()
+        self.command = Axises(True)
 
 
 if __name__ == "__main__":
