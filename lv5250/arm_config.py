@@ -39,7 +39,7 @@ class ArmConfig:
     # position.  It can be continously rotated without limit.
     # A value of None is used for the Min and Max limits to disable them.
     WRIST_ROLL_SCALE = 0.0019       # Angular degrees per encoder count
-    WRIST_ROLL_OFFSETT_DEG = 90     # Roll angle at zero counts.
+    WRIST_ROLL_OFFSETT_DEG = 0     # Roll angle at zero counts.
     WRIST_ROLL_MIN = None
     WRIST_ROLL_MAX = None
 
