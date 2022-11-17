@@ -37,7 +37,7 @@ class IncMoveMsg:
 
     def __init__(self, axis: AxisType, speed: int, counts: int):
         self.axis = AxisType(axis)
-        self.speed = int(speed)
+        self.speed = limit_check(int(speed), 1, 99)
         self.counts = int(counts)
 
 
@@ -47,14 +47,28 @@ class ArmMngrMessage(ArmMessage):
 
     Parameters:
     cb_final: The user level callback to make once the message as been sent and
-    a response is received or or the message times out.
+    a resp is received or or the message times out.
 
     """
 
-    def __init__(self, command: str, timeout=5, response: str = None,
-                 cb_start=None, cb_done=None, cb_other=None, cb_final=None,
-                 axises: Axises = None, inc_move: IncMoveMsg = None):
-        super().__init__(command, timeout, response, cb_start, cb_done, cb_other)
+    def __init__(self,
+                 command: str,
+                 timeout: int = 5,
+                 resp: str = None,
+                 resp_ignore: str = None,
+                 cb_start=None,
+                 cb_done=None,
+                 cb_other=None,
+                 cb_final=None,
+                 axises: Axises = None,
+                 inc_move: IncMoveMsg = None):
+        super().__init__(command=command,
+                         timeout=timeout,
+                         resp=resp,
+                         resp_ignore=resp_ignore,
+                         cb_start=cb_start,
+                         cb_done=cb_done,
+                         cb_other=cb_other)
         self.cb_final = cb_final
         # Absolute move command Axises
         self.axises = axises
@@ -110,13 +124,13 @@ class ArmManager:
 
         Parameters:
         cb: Function to be called once the Get Position command has
-        been sent and a response is received or the reques times out.
+        been sent and a resp is received or the reques times out.
         """
         message = ArmMngrMessage(command='GET POS',
-                                 response='P',
+                                 resp='P',
                                  timeout=2,
                                  cb_done=self._get_pos_cmd_end_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
@@ -126,13 +140,13 @@ class ArmManager:
 
         Parameters:
         cb: Function to be called once the Get Position command has
-        been sent and a response is received or the reques times out.
+        been sent and a resp is received or the reques times out.
         """
         message = ArmMngrMessage(command='?',
-                                 response='?',
+                                 resp='?',
                                  timeout=2,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
@@ -142,13 +156,13 @@ class ArmManager:
 
         Parameters:
         cb: Function to be called once the Get Position command has
-        been sent and a response is received or the reques times out.
+        been sent and a resp is received or the reques times out.
         """
         message = ArmMngrMessage(command='SET ESTOP 0',
-                                 response='>OK',
+                                 resp='>OK',
                                  timeout=2,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
@@ -164,11 +178,11 @@ class ArmManager:
         # Create the move command string
         cmd_str = self._move_cmd_str(speed, axises)
         message = ArmMngrMessage(command=cmd_str,
-                                 response='>END',
+                                 resp='>END',
                                  timeout=30,
                                  cb_start=self._move_to_cmd_start_cb,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb,
                                  axises=axises)
         self._arm_uart.tx_msg_enque(message)
@@ -200,11 +214,11 @@ class ArmManager:
         # Create the move command string
         cmd_str = self._move_cmd_str(speed, axises)
         message = ArmMngrMessage(command=cmd_str,
-                                 response='>END',
+                                 resp='>END',
                                  timeout=30,
                                  cb_start=self._move_to_cmd_start_cb,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb,
                                  axises=axises)
         self._arm_uart.tx_msg_enque(message)
@@ -214,13 +228,14 @@ class ArmManager:
         Add a Remote Command to the TX Que.
 
         The remote command notifies the Arm the the Serial Interface is Active
-        and generally only needs to be sent once to enable serial control.
+        and generally only needs to be sent once to enable serial control at
+        the start of a session.
         """
         message = ArmMngrMessage(command='REMOTE',
-                                 response='>OK',
+                                 resp='>OK',
                                  timeout=5,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
@@ -230,22 +245,61 @@ class ArmManager:
 
         """
         message = ArmMngrMessage(command='STOP',
-                                 response='>OK',
+                                 resp='>OK',
                                  timeout=5,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
-    def close_gripper_cmd(self, cb=None) -> None:
+    def gripper_close_cmd(self,
+                          speed: int = 50,
+                          timeout: int = 10,
+                          cb=None) -> None:
         """
-        Add a Close Gripper Command to the TX Que.
+        Add a Close Gripper Command to the TX Que and sait for the >GRIP_CLOSED
+        response which indicates the Gripper is fully closed or grasping an
+        object.
+
+        Parameters:
+        speed: Gripper speed (1 to 99%)
+        timeout: The maximuim time to wait for the comamnd to complete (seconds)
+        cb: Function to call once the command completes or it times out.
         """
-        message = ArmMngrMessage(command='MOVE 50 0 1',
-                                 response='>OK',
-                                 timeout=5,
+        speed = limit_check(speed, 1, 99)
+        message = ArmMngrMessage(command=f'MOVE {speed} 0 -1',
+                                 resp='>GRIP_CLOSED',
+                                 resp_ignore='>OK',
+                                 timeout=int(timeout),
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
+                                 cb_final=cb)
+        self._arm_uart.tx_msg_enque(message)
+
+    def gripper_open_cmd(self,
+                         speed: int = 50,
+                         timeout: int = 20,
+                         cb=None) -> None:
+        #TODO this doesn't call back after the gripper is fully open
+        # since there's not a response indicating when the gripper is fully
+        # open
+        """
+        Add a Open Gripper Command to the TX Que.
+
+
+        Parameters:
+        speed: Gripper speed (1 to 99%)
+        timeout: The maximuim time to wait for the comamnd to complete (seconds)
+        cb: Function to call once the command completes or it times out.
+        """
+
+        speed = limit_check(speed, 1, 99)
+        # The Arm replies with >OK immediately so we ignore that.
+        message = ArmMngrMessage(command=f'MOVE {speed} 0 1',
+                                 resp_ignore='>OK',
+                                 timeout=int(timeout),
+                                 cb_done=self._cmd_done_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
@@ -263,10 +317,10 @@ class ArmManager:
         it times out.
         """
         message = ArmMngrMessage(command='HARDHOME',
-                                 response='>END',
+                                 resp='>END',
                                  timeout=30,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
@@ -282,10 +336,10 @@ class ArmManager:
         it times out.
         """
         message = ArmMngrMessage(command='FREE',
-                                 response='>OK',
+                                 resp='>OK',
                                  timeout=1,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
@@ -300,10 +354,10 @@ class ArmManager:
         it times out.
         """
         message = ArmMngrMessage(command='TORQUE',
-                                 response='>OK',
+                                 resp='>OK',
                                  timeout=1,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
@@ -318,10 +372,10 @@ class ArmManager:
         it times out.
         """
         message = ArmMngrMessage(command='SHUTDOWN',
-                                 response='>OK',
+                                 resp='>OK',
                                  timeout=1,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
@@ -348,9 +402,9 @@ class ArmManager:
         cmd_str = 'MOVE {} {} {}'.format(speed, axis.value, dir)
         # The final callback is made by the get position comand.
         msg = ArmMngrMessage(command=cmd_str,
-                             response='>LIMIT',
+                             resp='>LIMIT',
                              timeout=20,
-                             cb_other=self._other_response_cb,
+                             cb_other=self._other_resp_cb,
                              cb_final=cb)
         self._arm_uart.tx_msg_enque(msg)
         # Add get position command so the position is updated after the move
@@ -397,11 +451,11 @@ class ArmManager:
         incremental = IncMoveMsg(axis, speed, counts)
 
         message = ArmMngrMessage(command=None,
-                                 response='>END',
+                                 resp='>END',
                                  timeout=30,
                                  cb_start=self._move_inc_cmd_start_cb,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb,
+                                 cb_other=self._other_resp_cb,
                                  cb_final=cb,
                                  inc_move=incremental)
         self._arm_uart.tx_msg_enque(message)
@@ -450,16 +504,17 @@ class ArmManager:
                 self.arm.queue.clear()
                 self._arm_update(arm)
 
-    # Function for handling a Get Position End response
+    # Function for handling a Get Position End resp
 
-    def _get_pos_cmd_end_cb(self, message: ArmMngrMessage, response: str):
+    def _get_pos_cmd_end_cb(self, message: ArmMngrMessage, resp: str):
         """
         Get Position Command End Callback
 
-        Updates the Arm object and makes the final callback.
+        Updates the local Arm object and makes the final callback.
+
         """
-        print('Position Response: {}'.format(response))
-        self._handle_position(response)
+        print('Position resp: {}'.format(resp))
+        self._handle_position(resp)
         # Make the final callback.
         if callable(message.cb_final):
             message.cb_final(self._arm_local)
@@ -471,7 +526,7 @@ class ArmManager:
         self._arm_update(self._arm_local)
         return message
 
-    def _cmd_done_cb(self, message: ArmMngrMessage, response: str):
+    def _cmd_done_cb(self, message: ArmMngrMessage, resp: str):
         """
         Shared Message Done Callback for messages which don't require any
         special completition work.  Makes the user level final callback
@@ -480,46 +535,45 @@ class ArmManager:
         if callable(message.cb_final):
             message.cb_final(self._arm_local)
 
-    # Generic Function for handling a Other (Unexcepted) Responses
-    def _other_response_cb(self, message: ArmMngrMessage, response: str):
+    # Generic Function for handling a Other (Unexcepted) resps
+    def _other_resp_cb(self, message: ArmMngrMessage, resp: str):
         #TODO update the ARM state
-        if response:
-            str_arr = response.split()
+        if resp:
+            str_arr = resp.split()
             if len(str_arr) > 0:
                 command = str_arr[0]
-                # Attempt to Detect the Response Type
-                if command == 'P':
-                    # Position Response
-                    self._handle_position(response)
+                # Attempt to Detect the resp Type
+                if command == 'P':  # Position resp
+                    self._handle_position(resp)
                 elif command == '?':
-                    self._handle_status(response)
+                    self._handle_status(resp)
                 elif command == 'ERR':
-                    print('Error Response: {}'.format(response))
+                    print(f'Error resp: {resp}')
                 elif command == 'ESTOP':
-                    print('E-Stop Response: {}'.format(response))
+                    print(f'E-Stop resp: {resp}')
                 elif command == '>LIMIT':
-                    print('Unexpected Limit Responses: {}'.format(response))
+                    print(f'Unexpected Limit resps: {resp}')
                 elif command == 'GRIP_OBJECT':
-                    print(response)
+                    print(resp)
                 elif command == 'END':
-                    print('Unexpected End Response: {}'.format(response))
+                    print(f'Unexpected End resp: {resp}')
                 elif command == '>OK':
-                    print('Ok Response: {}'.format(response))
+                    print(f'Ok resp: {resp}')
                 elif command == '>STEP':
-                    # STEP Responses are Received During a Hard Home
-                    print('Step Response: {}'.format(response))
+                    # STEP resps are Received During a Hard Home
+                    print(f'Step resp: {resp}')
                 else:
-                    print('Unhandled Response: {}'.format(response))
+                    print(f'Unhandled resp: {resp}')
 
-    def _handle_position(self, response: str):
+    def _handle_position(self, resp: str):
         """
-        Handle Position Responses
+        Handle Position resps
 
-        Position responses start with a P and contain each of the current Arm
+        Position resps start with a P and contain each of the current Arm
         Axis encoder positions.
         """
-        if response:
-            str_arr = response.split()
+        if resp:
+            str_arr = resp.split()
             if len(str_arr) == 9 and str_arr[0] == 'P':
                 self._arm_local.position.gripper.counts = int(str_arr[1])
                 self._arm_local.position.wrist_roll.counts = int(str_arr[2])
@@ -528,7 +582,7 @@ class ArmManager:
                 self._arm_local.position.shoulder.counts = int(str_arr[5])
                 self._arm_local.position.base.counts = int(str_arr[6])
                 self._arm_update(self._arm_local)
-                print(response)
+                print(resp)
                 # TODO:  handle the last two fields but we don't know their meaning
 
                 # print('Gripper : {}'.format(str_arr[1]))
@@ -538,14 +592,14 @@ class ArmManager:
                 # print('Shoulder : {}'.format(str_arr[5]))
                 # print('Base : {}'.format(str_arr[6]))
 
-    def _handle_status(self, response: str):
+    def _handle_status(self, resp: str):
         """
-        Handle Status Responses
+        Handle Status resps
 
-        Status Responses start with a ? and contain all Arm state information.
+        Status resps start with a ? and contain all Arm state information.
         """
-        if response:
-            str_arr = response.split()
+        if resp:
+            str_arr = resp.split()
             if len(str_arr) == 23 and str_arr[0] == '?':
                 # TODO:  handle the other fields
                 self._limit_decode(int(str_arr[8]))
@@ -557,9 +611,9 @@ class ArmManager:
                 self._arm_local.position.shoulder.counts = int(str_arr[14])
                 self._arm_local.position.base.counts = int(str_arr[15])
                 self._arm_update(self._arm_local)
-                #print(response)
+                #print(resp)
             else:
-                print('Unhandled Status: {}'.format(response))
+                print('Unhandled Status: {}'.format(resp))
 
     def _limit_decode(self, limit: int):
         if limit != 0:
@@ -619,14 +673,16 @@ class ArmManager:
                 par9)
         print(cmd_str)
         message = ArmMngrMessage(command=cmd_str,
-                                 response='>END',
+                                 resp='>END',
                                  timeout=30,
                                  cb_done=self._cmd_done_cb,
-                                 cb_other=self._other_response_cb)
+                                 cb_other=self._other_resp_cb)
         self._arm_uart.tx_msg_enque(message)
 
 
 def done_print_cb(arm):
+    print(
+        f'Gripper: {arm.position.gripper.counts} cnts / {arm.position.gripper.mm:.2f} mm')
     print(
         f'Wrist Roll: {arm.position.wrist_roll.counts} cnts / {arm.position.wrist_roll.angle:.1f} deg')
     print(
@@ -639,35 +695,49 @@ def done_print_cb(arm):
         f'Base: {arm.position.base.counts} cnts / {arm.position.base.angle:.1f} deg')
 
 
+def gripper_close_cb(arm):
+    #manager.stop_cmd()
+    print('gripper_close_cb()')
+
+
+def gripper_open_cb(arm):
+    #manager.stop_cmd()
+    print('gripper_open_cb()')
+
+
 if __name__ == "__main__":
 
     PORT = '/dev/cu.usbserial-FT5ZVFRV'
-    arm = ArmManager(PORT)
+    manager = ArmManager(PORT)
 
-    #arm.move_to_cal()
-    arm.remote_cmd()
-    arm.clear_estop_cmd()
-    arm.stop_cmd()
+    manager.remote_cmd()
+    manager.clear_estop_cmd()
+    manager.stop_cmd()
 
-    #arm.hard_home_cmd()
+    #manager.hard_home_cmd()
 
-    #Create an axises with the command position.
+    # manager.gripper_close_cmd(speed=60, timeout=10, cb=gripper_close_cb)
+    # manager.get_pos_cmd(done_print_cb)
+    # manager.gripper_open_cmd(speed=60, timeout=10, cb=gripper_open_cb)
+    # manager.get_pos_cmd(done_print_cb)
+    # manager.gripper_close_cmd(speed=60, timeout=10, cb=gripper_close_cb)
+    # manager.get_pos_cmd(done_print_cb)
 
     axises = Axises(limits_en=True)
-    axises.gripper.counts = 0
-    axises.wrist_roll.angle = 90
+    axises.gripper.mm = 50
+    axises.wrist_roll.angle = 0
     axises.shoulder.angle = 90
-    axises.elbow.angle = 90
-    axises.wrist_pitch.angle = 90
+    axises.elbow.angle = 0
+    axises.wrist_pitch.angle = 0
     axises.base.angle = 0
 
-    arm.move_to_axises_cmd(50, axises, done_print_cb)
-    axises.shoulder.angle = 110
-    axises.elbow.angle = 240
-    axises.wrist_pitch.angle = 180
+    manager.move_to_axises_cmd(50, axises, done_print_cb)
+    manager.get_pos_cmd(done_print_cb)
 
-    arm.move_to_axises_cmd(50, axises, done_print_cb)
-
+    #axises.gripper.counts = 100
+    #manager.move_to_axises_cmd(50, axises, done_print_cb)
+    #axises.gripper.counts = 20000
+    #manager.move_to_axises_cmd(50, axises, done_print_cb)
     #arm.get_pos_cmd(done_print_cb)
 
     #axises.wrist_pitch.angle = -10

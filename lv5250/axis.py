@@ -439,7 +439,7 @@ class LinearAxis(Axis):
     """
 
     def __init__(self, scale, min_cnt, max_cnt):
-        super().__init__(min_cnt, max_cnt)
+        super().__init__(min_cnt=min_cnt, max_cnt=max_cnt)
         self._scale = float(scale)
 
     @property
@@ -458,11 +458,11 @@ class LinearAxis(Axis):
         """
         Get the axis position in units of mm.
         """
-        return self.counts * self.scale
+        return self.counts * self._scale
 
     @mm.setter
-    def counts_mm(self, mm: float):
+    def mm(self, mm: float):
         """
         Set the counts axis position in units of mm.
         """
-        self.counts = round(mm / self.scale)
+        self.counts = round(mm / self._scale)

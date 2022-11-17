@@ -23,17 +23,12 @@ class ArmConfig:
     """
 
     # Gripper Axis Linear Scale
-    # Note that the Gripper Axis does not have a limit switch.  Care must be
-    # taken when opening the gripper or it may become stuck open .  The 4 bar
-    # mechanical linkage which supports the Gripper pads is driven by a worm
-    # gear drive that can not be turned by hand unlike the other axis. If the
-    # gripper is openned too far, it may be become stuck open.  The  only
-    # solution for unsticking the axis, which we have discovered, is to power
-    # the motor in reverse with an external power supply.
-    GRIPPER_SCALE = 0.1             # (mm per encoder count)
-    GRIPPER_MIN = None
-    GRIPPER_MAX = None
-    #TODO - gripper limits
+    # Note that the Gripper Axis does not have a limit switch.
+    # It seems like it uses  some combination of current or encoder
+    # transitions to detect the closed and fully open positions.
+    GRIPPER_SCALE = 1/1088             # (mm per encoder count)
+    GRIPPER_MIN = 0
+    GRIPPER_MAX = 115000
 
     # The Wrist Roll axis has a hardware switch in the center (neutral)
     # position.  It can be continously rotated without limit.

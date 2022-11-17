@@ -20,37 +20,60 @@ class ArmMessage:
     to sending and the results can be processed by the higher level code.
     """
 
-    def __init__(self, command: str, timeout=5, response: str = None, cb_start=None, cb_done=None, cb_other=None):
-        # The command to send.
-        # Line endings are automatically added .
+    def __init__(self,
+                 command: str,
+                 timeout=5,
+                 resp: str = None,
+                 resp_ignore: str = None,
+                 cb_start=None,
+                 cb_done=None,
+                 cb_other=None):
+        """
+        The command string to send. Line endings are automatically added.
+        """
         self.command = '{}\r\n'.format(command)
-        #print(self.command)
 
-        # The maximuim time to wait in seconds for a matching response before
-        # timing out.
+        """
+        The maximuim time to wait in seconds for a matching response before
+        timing out.
+        """
         self.timeout = float(timeout)
 
-        # The response string which is anticipated to be received fromthe arm to indicate
-        # that the command has completed.
-        # This string can be specified as the full response string or just the beginning
-        # part of the response.   The done callback will be made once a matching
-        # respone has received or the time out happens.
-        self.response = response
+        """
+        The response string which is anticipated to be received from the arm to
+        indicate that the command has completed.
+        This string can be specified as the full response string or just the
+        beginning portion of the response.   The done callback will be made
+        once a matching respone has been received or the time out happens.
+        """
+        self.resp = resp
 
-        # Function to call immediately before the command is sent.
-        # Has the form of callback(message : ArmMessage) -> ArmMessage
-        # The returned ArmMessage overwrites the existing message providing
-        # an oppurtunity for the callback to update the pending message.
+        """
+        The response string to ignore / discard if received.
+        """
+        self.resp_ignore = resp_ignore
+
+        """
+        Function to call immediately before the command is sent.
+        Has the form of callback(message : ArmMessage) -> ArmMessage
+        The returned ArmMessage overwrites the existing message providing
+        an oppurtunity for the callback to update the pending message.
+        """
         self.cb_start = cb_start
 
-        # Function to call once a matching doen response has been received or
-        # a timeout happens.
-        # Has the form of callback(message : ArmMessage, response : str)
+        """
+        Function to call once a matching doen response has been received or
+        a timeout happens.
+        Has the form of callback(message : ArmMessage, response : str)
+        """
         self.cb_done = cb_done
 
-        # Function to call when a respones other than the done responnse has been received.
-        # Other responses will be ignored if set to None
-        # Has the form of callback(message : ArmMessage, response : str)
+        """
+        Function to call when a respones other than the done or the ignore
+        responnse has been received.
+        Other responses will be ignored if set to None
+        Has the form of callback(message : ArmMessage, response : str)
+        """
         self.cb_other = cb_other
 
 
@@ -59,7 +82,7 @@ class ArmUART:
     def __init__(self, port):
 
         # Que of responses received over the the serial link
-        self.responses = queue.Queue()
+        self.resps = queue.Queue()
 
         # Lock for ensuring exclusive Serial transmission accesss
         self.tx_lock = threading.Lock()
@@ -94,7 +117,7 @@ class ArmUART:
             print("Error Openning Port: " + str(e))
         else:
             print("Port Open")
-            self.responses.queue.clear()
+            self.resps.queue.clear()
             self.messages.queue.clear()
             self.rx_thread.start()
             self.tx_thread.start()
@@ -118,7 +141,7 @@ class ArmUART:
             line_str = line.decode('ascii')
             #print(line)
             if len(line_str) > 0:
-                self.responses.put(line_str)
+                self.resps.put(line_str)
             time.sleep(0.1)
 
     # loop for transmitting messages from the messages que
@@ -147,19 +170,24 @@ class ArmUART:
                 self.serial.write(bytes(message.command, 'ascii'))
                 while True:
                     try:
-                        line = self.responses.get(timeout=message.timeout)
-                        if message.response:
-                            if line.startswith(message.response):
+                        line = self.resps.get(timeout=message.timeout)
+
+                        if message.resp_ignore and line.startswith(message.resp_ignore):
+                            # The Ignore response received, check the next response.
+                            #print(f'Ignore Response {line} Received')
+                            pass
+                        elif message.resp:
+                            if line.startswith(message.resp):
                                 # The correct response was received
-                                #print('Response Received')
+                                #print(f'Anticipated Response {line} Receieved')
                                 if callable(message.cb_done):
                                     message.cb_done(message, line)
                                 return
                             else:
-                                # The response didn't match the anticipated response.
+                                # The response didn't match the anticipated
+                                # response, check the next responnse.
                                 if callable(message.cb_other):
                                     message.cb_other(message, line)
-                                # Don't return here, check the next responsnes.
                         else:
                             # No anticipated response was set so return after
                             # the first response is received.
