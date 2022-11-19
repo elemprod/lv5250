@@ -8,10 +8,11 @@ from enum import Enum, auto
 
 from axises import Axises
 
-# Enumneration represnting the ARM's serial connection state.
+#
 
 
 class ArmConnectionState(Enum):
+    """The Arm's current serial connection state. """
     UNKNOWN = auto()        # Uknown / Not previously connected
     DISCONNECTED = auto()   # Currently Disconnected.
     CONNECTED = auto()      # Currently Connected
@@ -34,13 +35,3 @@ class Arm:
         Arm from being commanded to an invalid position.
         """
         self.command = Axises(True)
-
-
-if __name__ == "__main__":
-    arm = Arm()
-
-    print(
-        f'Shoulder Offsett {arm.command.shoulder.offsett}, Scale: {arm.command.shoulder.scale}')
-    arm.command.shoulder.degrees = 108
-    print('Shoulder: {} deg / {} Cnts'.format(arm.command.shoulder.degrees,
-          arm.command.shoulder.counts))
