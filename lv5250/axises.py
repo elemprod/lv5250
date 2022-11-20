@@ -1,7 +1,6 @@
-
-import axis
-from axis import LinearAxis, RotaryAxis, RotaryAxisRelative, AxisType
-from arm_config import ArmConfig
+from lv5250 import *
+from lv5250.axis import *
+from lv5250.arm_config import ArmConfig
 
 
 class Axises:

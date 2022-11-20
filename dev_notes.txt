@@ -1,0 +1,8 @@
+Build Package
+
+flit publish
+
+
+Install the Package to the Local Virtual Environment
+
+flit install

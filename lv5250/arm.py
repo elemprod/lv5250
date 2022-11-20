@@ -1,14 +1,9 @@
-
-import axis
-from axis import LinearAxis, RotaryAxis, AxisType
-from arm_config import ArmConfig
-
 import enum
 from enum import Enum, auto
 
-from axises import Axises
-
-#
+from lv5250 import *
+from lv5250.axis import *
+from lv5250.axises import *
 
 
 class ArmConnectionState(Enum):

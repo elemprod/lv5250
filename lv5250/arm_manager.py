@@ -1,12 +1,8 @@
-import arm
-import arm_uart
-
-from arm import Arm
-from axis import AxisType
-from axises import Axises
-
-
-from arm_uart import ArmMessage, ArmUART
+from lv5250 import *
+from lv5250.arm import *
+from lv5250.axis import *
+from lv5250.axises import *
+from lv5250.arm_uart import *
 
 import queue
 import time
@@ -85,9 +81,9 @@ class ArmManager:
         Parameters:
         port: String description of the port.
         """
-        self._arm_uart = arm_uart.ArmUART(port)
+        self._arm_uart = ArmUART(port)
         # Internal Arm Data Object
-        self._arm_local = arm.Arm()
+        self._arm_local = Arm()
 
         # External Arm Data Object Queue
         # The object is updated with the current arm state, position and

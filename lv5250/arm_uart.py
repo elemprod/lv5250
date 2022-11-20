@@ -1,5 +1,5 @@
 import time
-# pip3 install pyserial
+# pip install pyserial (not serial)
 import serial
 import threading
 from threading import Thread
@@ -9,7 +9,8 @@ try:
 except ImportError:
     import Queue as queue
 
-from arm import Arm, ArmConnectionState
+from lv5250 import *
+from lv5250.arm import *
 
 
 class ArmMessage:
@@ -199,74 +200,3 @@ class ArmUART:
                         if callable(message.cb_done):
                             message.cb_done(message, None)
                         return
-
-
-if __name__ == "__main__":
-
-    def other_print(message: ArmMessage, response: str):
-        print('Other Response : {}'.format(response))
-
-    def get_pos_print(message: ArmMessage, response: str):
-        #print('Position : {}'.format(response))
-        if response:
-            str_arr = response.split()
-            if len(str_arr) == 9:
-                print('Gripper : {}'.format(str_arr[1]))
-                print('Wrist Roll : {}'.format(str_arr[2]))
-                print('Wrist Pitch : {}'.format(str_arr[3]))
-                print('Elbow : {}'.format(str_arr[4]))
-                print('Shoulder : {}'.format(str_arr[5]))
-                print('Base : {}'.format(str_arr[6]))
-
-    def hard_home_print(message: ArmMessage, response: str):
-        print("Hard Home Done")
-
-    def remote_print(message: ArmMessage, response: str):
-        print('Remote : {}'.format(response))
-
-    def run_done_print(message: ArmMessage, response: str):
-        print('Run Done : {}'.format(response))
-
-    arm_serial = ArmUART("/dev/cu.usbserial-FT5ZVFRV")
-
-    msg_hard_home = ArmMessage(command='HARDHOME',
-                               response='>END',
-                               timeout=30,
-                               cb_done=hard_home_print,
-                               cb_other=other_print)
-
-    msg_get_pos = ArmMessage(command='GET POS',
-                             response='P',
-                             timeout=2,
-                             cb_done=get_pos_print,
-                             cb_other=other_print)
-
-    msg_remote = ArmMessage(command='REMOTE',
-                            response=None,
-                            timeout=1,
-                            cb_done=remote_print,
-                            cb_other=None)
-
-    msg_remote = ArmMessage(command='REMOTE',
-                            response=None,
-                            timeout=1,
-                            cb_done=remote_print,
-                            cb_other=None)
-
-    msg_run = ArmMessage(command='RUN 50 0 0 0 0 2500 0 -1000 0 1',
-                         response='>END',
-                         timeout=1,
-                         cb_done=run_done_print,
-                         cb_other=other_print)
-
-    for _ in range(1):
-        #arm_serial.tx_msg_enque(msg_get_pos)
-        #arm_serial.tx_msg_enque(msg_run)
-        #arm_serial.tx_msg_enque(msg_get_pos)
-        arm_serial.tx_msg_enque(msg_remote)
-        arm_serial.tx_msg_enque(msg_hard_home)
-        arm_serial.tx_msg_enque(msg_get_pos)
-        arm_serial.tx_msg_enque(msg_run)
-
-    while True:
-        time.sleep(5)
