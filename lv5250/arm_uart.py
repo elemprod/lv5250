@@ -1,5 +1,5 @@
 import time
-# pip install pyserial (not serial)
+# pyserial (not serial)
 import serial
 import threading
 from threading import Thread
@@ -24,7 +24,7 @@ class ArmMessage:
     def __init__(self,
                  command: str,
                  timeout=5,
-                 resp: str = None,
+                 resp: list[str] = None,
                  resp_ignore: str = None,
                  cb_start=None,
                  cb_done=None,
@@ -41,13 +41,18 @@ class ArmMessage:
         self.timeout = float(timeout)
 
         """
-        The response string which is anticipated to be received from the arm to
-        indicate that the command has completed.
-        This string can be specified as the full response string or just the
+        A string or list strings which that are potential anticipated responses
+        from the arm whihc indicate that the command has completed.
+        This strings can be specified as the full response string or just the
         beginning portion of the response.   The done callback will be made
-        once a matching respone has been received or the time out happens.
+        once a matching respone strings has been received or the time out
+        happens.
         """
-        self.resp = resp
+        if type(resp) is string:
+            # create single entry list if string was supplied
+            self.resp = [resp]
+        else:
+            self.resp = resp
 
         """
         The response string to ignore / discard if received.
@@ -57,8 +62,9 @@ class ArmMessage:
         """
         Function to call immediately before the command is sent.
         Has the form of callback(message : ArmMessage) -> ArmMessage
+
         The returned ArmMessage overwrites the existing message providing
-        an oppurtunity for the callback to update the pending message.
+        an oppurtunity for the callback to update a pending message.
         """
         self.cb_start = cb_start
 
@@ -178,17 +184,18 @@ class ArmUART:
                             #print(f'Ignore Response {line} Received')
                             pass
                         elif message.resp:
-                            if line.startswith(message.resp):
-                                # The correct response was received
-                                #print(f'Anticipated Response {line} Receieved')
-                                if callable(message.cb_done):
-                                    message.cb_done(message, line)
-                                return
-                            else:
-                                # The response didn't match the anticipated
-                                # response, check the next responnse.
-                                if callable(message.cb_other):
-                                    message.cb_other(message, line)
+                            for resp_str in message.resp:
+                                if line.startswith(resp_str):
+                                    # The correct response was received
+                                    print(
+                                        f'Anticipated Response {line} Receieved')
+                                    if callable(message.cb_done):
+                                        message.cb_done(message, line)
+                                    return
+                            # The response didn't match the anticipated
+                            # response, check the next responnse.
+                            if callable(message.cb_other):
+                                message.cb_other(message, line)
                         else:
                             # No anticipated response was set so return after
                             # the first response is received.

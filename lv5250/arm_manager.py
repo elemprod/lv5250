@@ -162,7 +162,11 @@ class ArmManager:
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
-    def move_to_axises_cmd(self, speed: int, axises: Axises, cb=None) -> None:
+    def move_to_axises_cmd(self,
+                           speed: int,
+                           axises: Axises,
+                           cb=None,
+                           timeout: int = 30) -> None:
         """
         Add a Move to an Absolute Position Command to the TX Que.
 
@@ -172,10 +176,10 @@ class ArmManager:
         cb: Function to be called once the move has been completed or times out.
         """
         # Create the move command string
-        cmd_str = self._move_cmd_str(speed, axises)
+        cmd_str = self._run_cmd_str(speed, axises)
         message = ArmMngrMessage(command=cmd_str,
                                  resp='>END',
-                                 timeout=30,
+                                 timeout=int(timeout),
                                  cb_start=self._move_to_cmd_start_cb,
                                  cb_done=self._cmd_done_cb,
                                  cb_other=self._other_resp_cb,
@@ -208,7 +212,7 @@ class ArmManager:
         axises.base.counts = base
 
         # Create the move command string
-        cmd_str = self._move_cmd_str(speed, axises)
+        cmd_str = self._run_cmd_str(speed, axises)
         message = ArmMngrMessage(command=cmd_str,
                                  resp='>END',
                                  timeout=30,
@@ -375,7 +379,7 @@ class ArmManager:
                                  cb_final=cb)
         self._arm_uart.tx_msg_enque(message)
 
-    def move_to_limit_cmd(self, axis: AxisType, speed: int, cb=None) -> None:
+    def move_to_limit_cmd(self, axis: AxisType, speed: int, cb=None, timeout: int = 30) -> None:
         """
         Add a Move to Limit Switch Command to the TX Que.
 
@@ -384,22 +388,15 @@ class ArmManager:
         Parameters:
         axis: The axis to move.  Note that not all axis have limit switches.
         speed: Arm speed -99 to 99 %
-        cb: Function to be called once the Shutdown Command completes or
-        it times out.
+        cb: Function to be called once the limit switch is detected or the move
+        times out.
         """
 
-        if speed < 0:
-            dir = -1    # reverse
-        else:
-            dir = 1     # forward
-        speed = abs(speed)
-        speed = limit_check(speed, 0, 99)
-
-        cmd_str = 'MOVE {} {} {}'.format(speed, axis.value, dir)
+        cmd_str = self._move_cmd_str(axis, speed)
         # The final callback is made by the get position comand.
         msg = ArmMngrMessage(command=cmd_str,
                              resp='>LIMIT',
-                             timeout=20,
+                             timeout=int(timeout),
                              cb_other=self._other_resp_cb,
                              cb_final=cb)
         self._arm_uart.tx_msg_enque(msg)
@@ -408,27 +405,43 @@ class ArmManager:
         # position when it encounters a limit switch.
         self.get_pos_cmd(cb)
 
-    def move_to_cal(self, cb=None) -> None:
+    def move_axis_cmd(self, axis: AxisType, speed: int, cb=None, timeout: int = 30) -> None:
         """
-        Move the Arm to Calibration Position.
+        Add a Move Axis Command to the TX Que.  The command moves the
+        selected axis until the limit switch is detected or a stop command is
+        sent.  The command returns once the OK response is received from the
+        Arm or it times outs.
 
-        The upper arm linkage will be parallel to the ground.
-        The lower arm linkage will be at a right angle to the ground.
-        The Wrist Pitch will be at a right angle to the ground.
-
+        Parameters:
+        axis: The axis to move.
+        speed: Arm speed -99 to 99 %
+        cb: Function to be called once the move command is sent.
         """
-        self.remote_cmd()
-        self.clear_estop_cmd()
-        self.stop_cmd()
-        self.hard_home_cmd()
 
-        axises = Axises()
-        axises.shoulder.angle = 0
-        self.move_to_axises_cmd(50, axises)
-        axises.wrist_pitch.counts = 0
-        # self.move_to_axises_cmd(50, axises)
-        # axises.elbow.angle = -90
-        # self.move_to_axises_cmd(50, axises)
+        cmd_str = self._move_cmd_str(axis, speed)
+        print(cmd_str)
+        # The final callback is made by the get position comand.
+        msg = ArmMngrMessage(command=cmd_str,
+                             resp='>OK',
+                             timeout=int(timeout),
+                             cb_other=self._other_resp_cb,
+                             cb_final=cb)
+        self._arm_uart.tx_msg_enque(msg)
+
+    def _move_cmd_str(self, axis: AxisType, speed: int) -> str:
+        """
+        Create a Move Command Message String.
+        """
+        speed_cmd = int(speed)
+        if speed_cmd < 0:
+            dir_cmd = -1    # reverse
+        else:
+            dir_cmd = 1     # forward
+        speed_cmd = abs(speed)
+        speed_cmd = limit_check(speed_cmd, 0, 99)
+
+        cmd_str = 'MOVE {} {} {}'.format(speed_cmd, axis.value, dir_cmd)
+        return cmd_str
 
     def move_inc_cmd(self, axis: AxisType, speed: int, counts: int, cb=None) -> None:
         """
@@ -478,7 +491,7 @@ class ArmManager:
             self._arm_local.command.base.counts += message.inc_move.counts
 
         # Generate the command string
-        message.command = self._move_cmd_str(
+        message.command = self._run_cmd_str(
             message.inc_move.speed, self._arm_local.command)
         print('Incremental Move Msg: {}'.format(message.command))
         self._arm_update(self._arm_local)
@@ -581,13 +594,6 @@ class ArmManager:
                 print(resp)
                 # TODO:  handle the last two fields but we don't know their meaning
 
-                # print('Gripper : {}'.format(str_arr[1]))
-                # print('Wrist Roll : {}'.format(str_arr[2]))
-                # print('Wrist Pitch : {}'.format(str_arr[3]))
-                # print('Elbow : {}'.format(str_arr[4]))
-                # print('Shoulder : {}'.format(str_arr[5]))
-                # print('Base : {}'.format(str_arr[6]))
-
     def _handle_status(self, resp: str):
         """
         Handle Status resps
@@ -627,9 +633,9 @@ class ArmManager:
             if limit & (1 << AxisType.GRIPPER.value):
                 print('Gripper Limit')
 
-    def _move_cmd_str(self, speed: int, axises: Axises) -> str:
+    def _run_cmd_str(self, speed: int, axises: Axises) -> str:
         """
-        Create a Move Command Message String from the
+        Create a Run Command Message String from the
         supplied Axises object
         """
         speed = limit_check(speed, 1, 99)
@@ -710,6 +716,15 @@ if __name__ == "__main__":
     manager.clear_estop_cmd()
     manager.stop_cmd()
 
+    for i in range(10):
+        manager.move_axis_cmd(axis=AxisType.ELBOW, speed=20)
+        time.sleep(1)
+        manager.stop_cmd()
+
+        manager.move_axis_cmd(axis=AxisType.ELBOW, speed=-20)
+        time.sleep(1)
+        manager.stop_cmd()
+
     #manager.hard_home_cmd()
 
     # manager.gripper_close_cmd(speed=60, timeout=10, cb=gripper_close_cb)
@@ -719,16 +734,16 @@ if __name__ == "__main__":
     # manager.gripper_close_cmd(speed=60, timeout=10, cb=gripper_close_cb)
     # manager.get_pos_cmd(done_print_cb)
 
-    axises = Axises(limits_en=True)
-    axises.gripper.mm = 50
-    axises.wrist_roll.angle = 0
-    axises.shoulder.angle = 90
-    axises.elbow.angle = 0
-    axises.wrist_pitch.angle = 0
-    axises.base.angle = 0
-
-    manager.move_to_axises_cmd(50, axises, done_print_cb)
-    manager.get_pos_cmd(done_print_cb)
+    # axises = Axises(limits_en=True)
+    # axises.gripper.mm = 50
+    # axises.wrist_roll.angle = 0
+    # axises.shoulder.angle = 90
+    # axises.elbow.angle = 0
+    # axises.wrist_pitch.angle = 0
+    # axises.base.angle = 0
+    #
+    # manager.move_to_axises_cmd(50, axises, done_print_cb)
+    # manager.get_pos_cmd(done_print_cb)
 
     #axises.gripper.counts = 100
     #manager.move_to_axises_cmd(50, axises, done_print_cb)
@@ -757,5 +772,7 @@ if __name__ == "__main__":
 
     #arm.move_to_limit_cmd(AxisType.SHOULDER, -10, print_abs_cb)
     #arm.get_pos_cmd(print_abs_cb)
+
+    time.sleep(120)
 
     time.sleep(120)
