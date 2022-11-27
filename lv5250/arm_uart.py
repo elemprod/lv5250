@@ -48,7 +48,7 @@ class ArmMessage:
         once a matching respone strings has been received or the time out
         happens.
         """
-        if type(resp) is string:
+        if type(resp) is str:
             # create single entry list if string was supplied
             self.resp = [resp]
         else:
