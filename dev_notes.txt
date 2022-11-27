@@ -1,8 +1,24 @@
-Build Package
+Build Package - build a local package but don't upload.
 
-flit publish
-
+flit build
 
 Install the Package to the Local Virtual Environment
 
 flit install
+
+
+Virtual Environment Setup
+
+python3 -m venv venv
+
+Activate Virtual Environment
+
+source venv/bin/activate
+
+
+*Required Packages
+
+(Not serial)
+pip install pyserial
+
+pip install tk 

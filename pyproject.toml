@@ -9,5 +9,10 @@ license = {file = "LICENSE"}
 classifiers = ["License :: OSI Approved :: MIT License"]
 dynamic = ["version", "description"]
 
+dependencies = [
+    'pyserial ~= 3.4',
+]
+
+
 [project.urls]
 Home = "https://github.com/elemprod/lv5250"
