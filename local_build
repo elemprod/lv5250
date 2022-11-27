@@ -8,6 +8,6 @@ git add .
 
 git commit -m "$commit_message"
 
-#flit build
+flit build
 
-#flit install
+flit install
