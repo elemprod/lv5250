@@ -38,14 +38,18 @@ class TextPrint:
         self.x -= 10
 
 
-def button_down(arm_manager, button_num):
+def move_to_complete(arm):
+    print("Move Complete")
+
+
+def button_down(arm, button_num):
     config = JoyConfig()
 
     if button_num < len(config.buttons):
         print(button_num)
         if config.buttons[button_num] != None:
             print(config.buttons[button_num].axis)
-            current_arm = arm_manager.arm_get(block=False)
+            current_arm = arm.arm_get(block=False)
             if current_arm != None:
                 current_axises = current_arm.position
                 if config.buttons[button_num].axis == AxisType.BASE:
@@ -56,9 +60,10 @@ def button_down(arm_manager, button_num):
                     current_axises.wrist_pitch.counts += config.buttons[button_num].counts
                 elif config.buttons[button_num].axis == AxisType.SHOULDER:
                     current_axises.shoulder.counts += config.buttons[button_num].counts
-                arm_manager.move_to_axises_cmd(50, current_axises)
+                arm.move_to_axises_cmd(
+                    10, axises=current_axises, cb=move_to_complete)
 
-            # arm_manager.move_inc_cmd(
+            # arm.move_inc_cmd(
             #     config.buttons[button_num].axis, 50, config.buttons[button_num].counts)
 
         else:
@@ -70,11 +75,10 @@ def main():
     PORT = '/dev/cu.usbserial-FT5ZVFRV'
     arm = ArmManager(PORT)
 
-    #arm.move_to_cal()
     arm.remote_cmd()
     arm.clear_estop_cmd()
     arm.stop_cmd()
-    arm.hard_home_cmd()
+    #arm.hard_home_cmd()
     arm.torque_cmd()
     arm.get_pos_cmd()
     #arm.move_inc_cmd(AxisType.BASE, 50, 50000)
@@ -104,12 +108,12 @@ def main():
                 done = True  # Flag that we are done so we exit this loop.
 
             if event.type == pygame.JOYBUTTONDOWN:
-                print("Joystick button pressed.")
+                print("Press")
                 button_down(arm, event.button)
 
             if event.type == pygame.JOYBUTTONUP:
-                print("Joystick button released.")
-                arm_manager.stop_cmd()
+                print("Release")
+                arm.stop_cmd()
 
             # Handle hotplugging
             if event.type == pygame.JOYDEVICEADDED:
